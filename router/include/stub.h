@@ -11,8 +11,8 @@ struct pcaphdr {
   uint32_t reserved_2;
   uint32_t snap_len;
   struct {
-  	uint32_t fcs:4;
-  	uint32_t link_type:28;
+    uint32_t fcs:4;
+    uint32_t link_type:28;
   } link_type;
 };
 

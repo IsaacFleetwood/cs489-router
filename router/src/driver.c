@@ -34,7 +34,7 @@ int driver_main(int argc, char** argv) {
   while((amt_read = fread(&record_header, sizeof(struct pkt_rec_hdr), 1, file)) != 0) {
     // Print packet information
     printf("Packet %d: timestamp= %#08x subtimestamp= %#08x actual length= %d captured_length= %d\n",
-    	index + 1, record_header.timestamp, record_header.timestamp_lower, record_header.original_pkt_len, record_header.captured_pkt_len);
+      index + 1, record_header.timestamp, record_header.timestamp_lower, record_header.original_pkt_len, record_header.captured_pkt_len);
     fread(buffer, record_header.captured_pkt_len, 1, file);
     ethernet_handle((pkt_ether_hdr*) buffer, int_id);
     index += 1;

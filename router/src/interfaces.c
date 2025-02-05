@@ -7,33 +7,33 @@
 // TODO: Move to configurable file/db? Add management interface where you can change this?
 // TODO: Use mutexes to guard this data structure. (Depending on when/if it is modified)
 interface_config_t interface_arr[] = {
-    {
-        .name = "eth0",
-        .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
-        .network_ip = {192,168,0,0},
-        .cidr_prefix_len = 24,
-        .interface_ip = {192,168,0,1},
-        .side = INT_SIDE_LAN,
-        .type = INT_TYPE_ETHER,
-    },
-    {
-        .name = "wlo0",
-        .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
-        .network_ip = {192, 168, 1, 0},
-        .cidr_prefix_len = 24,
-        .interface_ip = {192,168,1,1},
-        .side = INT_SIDE_LAN,
-        .type = INT_TYPE_WIFI,
-    },
-    {
-        .name = "eth1",
-        .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
-        .network_ip = {0,0,0,0},
-        .cidr_prefix_len = 0,
-        .interface_ip = {192,168,2,2},
-        .side = INT_SIDE_WAN,
-        .type = INT_TYPE_ETHER,
-    },
+  {
+    .name = "eth0",
+    .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
+    .network_ip = {192,168,0,0},
+    .cidr_prefix_len = 24,
+    .interface_ip = {192,168,0,1},
+    .side = INT_SIDE_LAN,
+    .type = INT_TYPE_ETHER,
+  },
+  {
+    .name = "wlo0",
+    .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
+    .network_ip = {192, 168, 1, 0},
+    .cidr_prefix_len = 24,
+    .interface_ip = {192,168,1,1},
+    .side = INT_SIDE_LAN,
+    .type = INT_TYPE_WIFI,
+  },
+  {
+    .name = "eth1",
+    .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
+    .network_ip = {0,0,0,0},
+    .cidr_prefix_len = 0,
+    .interface_ip = {192,168,2,2},
+    .side = INT_SIDE_WAN,
+    .type = INT_TYPE_ETHER,
+  },
 };
 
 mac_addr_t interface_mac_addrs[] = {
@@ -58,34 +58,34 @@ ip_addr_t interface_get_ip(interface_id_t int_id) {
 }
 
 ip_addr_t interface_get_subnet_mask(interface_config_t* config) {
-    uint8_t cidr_prefix_len = config->cidr_prefix_len;
-    ip_addr_t mask = {0, 0, 0, 0};
-    for(int i = 0; i < 3; i++) {
-        if(cidr_prefix_len <= 8) {
-            mask.bytes[i] = ((int8_t) -1) << (8 - cidr_prefix_len);
-            break;
-        } else {
-            mask.bytes[i] = 0xff;
-            cidr_prefix_len -= 8;
-        }
+  uint8_t cidr_prefix_len = config->cidr_prefix_len;
+  ip_addr_t mask = {0, 0, 0, 0};
+  for(int i = 0; i < 3; i++) {
+    if(cidr_prefix_len <= 8) {
+      mask.bytes[i] = ((int8_t) -1) << (8 - cidr_prefix_len);
+      break;
+    } else {
+      mask.bytes[i] = 0xff;
+      cidr_prefix_len -= 8;
     }
-    return mask;
+  }
+  return mask;
 }
 
 interface_id_t get_interface_for_ip(ip_addr_t ip) {
-    interface_id_t int_id;
-    int8_t highest_cidr_prefix_len = -1;
-    for(uint8_t i = 0; i < (sizeof(interface_arr) / sizeof(interface_config_t)); i += 1) {
-        interface_config_t* config = &interface_arr[i];
-        if(config->cidr_prefix_len <= highest_cidr_prefix_len)
-            continue;
-        ip_addr_t mask = interface_get_subnet_mask(config);
-        if(ip_addr_equals(apply_mask(mask, ip), config->network_ip)) {
-            int_id = i;
-            highest_cidr_prefix_len = config->cidr_prefix_len;
-        }
+  interface_id_t int_id;
+  int8_t highest_cidr_prefix_len = -1;
+  for(uint8_t i = 0; i < (sizeof(interface_arr) / sizeof(interface_config_t)); i += 1) {
+    interface_config_t* config = &interface_arr[i];
+    if(config->cidr_prefix_len <= highest_cidr_prefix_len)
+      continue;
+    ip_addr_t mask = interface_get_subnet_mask(config);
+    if(ip_addr_equals(apply_mask(mask, ip), config->network_ip)) {
+      int_id = i;
+      highest_cidr_prefix_len = config->cidr_prefix_len;
     }
-    return int_id;
+  }
+  return int_id;
 }
 
 mac_addr_t interface_get_mac_addr(interface_id_t int_id) {
