@@ -15,13 +15,13 @@
 typedef uint8_t interface_id_t;
 
 typedef struct interface_config {
-    char* name;
-    mac_addr_t device_mac_addr;
-    ip_addr_t network_ip; // 192.168.0.0
-    ip_addr_t interface_ip; // 192.168.0.1
-    uint8_t cidr_prefix_len;
-    uint8_t type: 2; // Type of interface (ethernet, wifi, etc)
-    uint8_t side: 1; // WAN or LAN
+  char* name;
+  mac_addr_t device_mac_addr;
+  ip_addr_t network_ip; // 192.168.0.0
+  ip_addr_t interface_ip; // 192.168.0.1
+  uint8_t cidr_prefix_len;
+  uint8_t type: 2; // Type of interface (ethernet, wifi, etc)
+  uint8_t side: 1; // WAN or LAN
 } interface_config_t;
 
 interface_id_t get_interface_for_ip(ip_addr_t);
