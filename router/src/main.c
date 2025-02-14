@@ -1,14 +1,19 @@
 #include <stdio.h>
 #include <ifaddrs.h>
 
-#define DRIVER_ENABLED (1)
+#include "../include/stub.h"
+
+#define DRIVER_ENABLED
 int driver_main(int argc, char** argv);
 
 int main(int argc, char** argv) {
 
-  if(DRIVER_ENABLED) {
-    return driver_main(argc, argv);
-  }
+  #ifdef STUB_ENABLED
+  stub_init();
+  #endif
+  #ifdef DRIVER_ENABLED
+  return driver_main(argc, argv);
+  #endif
 
   struct ifaddrs *addrs,*tmp;
 
