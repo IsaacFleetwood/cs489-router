@@ -1,7 +1,12 @@
+#include <pthread.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
 #include "../include/ethernet.h"
 #include "../include/stub.h"
+#include "../include/timer.h"
 
 int driver_main(int argc, char** argv) {
   if(argc < 2) {
@@ -33,11 +38,22 @@ int driver_main(int argc, char** argv) {
   // Read the captured packet record header
   while((amt_read = fread(&record_header, sizeof(pcaprec_hdr_t), 1, file)) != 0) {
     // Print packet information
-    printf("Packet %d: timestamp= %#08x subtimestamp= %#08x actual length= %d captured_length= %d\n",
-      index + 1, record_header.ts_sec, record_header.ts_usec, record_header.orig_len, record_header.incl_len);
+    //printf("Packet %d: timestamp= %#08x subtimestamp= %#08x actual length= %d captured_length= %d\n",
+    //  index + 1, record_header.ts_sec, record_header.ts_usec, record_header.orig_len, record_header.incl_len);
+    //memset(buffer, 0, file_header.snaplen);
     fread(buffer, record_header.incl_len, 1, file);
+    buffer[record_header.incl_len] = 0;
     ethernet_handle((pkt_ether_hdr*) buffer, int_id);
     index += 1;
+  }
+  free(buffer);
+  // print_pairs();
+  while(1) {
+    pthread_mutex_lock(&timer_mutex);
+    if(delta_list == NULL)
+      break;
+    pthread_mutex_unlock(&timer_mutex);
+    sched_yield();
   }
   return 0;
 }

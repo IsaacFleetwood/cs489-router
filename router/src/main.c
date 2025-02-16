@@ -1,12 +1,15 @@
 #include <stdio.h>
 #include <ifaddrs.h>
 
+#include "../include/timer.h"
 #include "../include/stub.h"
 
 #define DRIVER_ENABLED
 int driver_main(int argc, char** argv);
 
 int main(int argc, char** argv) {
+
+  timer_init();
 
   #ifdef STUB_ENABLED
   stub_init();
@@ -15,6 +18,7 @@ int main(int argc, char** argv) {
   return driver_main(argc, argv);
   #endif
 
+  // https://stackoverflow.com/questions/4139405/how-can-i-get-to-know-the-ip-address-for-interfaces-in-c
   struct ifaddrs *addrs,*tmp;
 
   getifaddrs(&addrs);
