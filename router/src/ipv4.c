@@ -69,7 +69,7 @@ void napt_out_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
     entry->public_port.value = new_src_port;
     entry->dest_ip = pkt->dst_ip;
     entry->dest_port.value = dest_port;
-    entry->timestamp = get_time();
+    entry->timestamp = get_time(); // TODO: Implement this function
   }
 
   // Modify the packet to reflect the new public IP and port
