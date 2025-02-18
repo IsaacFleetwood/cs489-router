@@ -3,26 +3,27 @@
 
 #include <stdint.h>
 
-struct pcaphdr {
-  uint32_t magic;
-  uint16_t major_ver;
-  uint16_t minor_ver;
-  uint32_t reserved_1;
-  uint32_t reserved_2;
-  uint32_t snap_len;
-  struct {
-    uint32_t fcs:4;
-    uint32_t link_type:28;
-  } link_type;
-};
+// Structs taken from https://wiki.wireshark.org/Development/LibpcapFileFormat
+typedef struct pcap_hdr_s {
+    uint32_t magic_number;   /* magic number */
+    uint16_t version_major;  /* major version number */
+    uint16_t version_minor;  /* minor version number */
+    int32_t  thiszone;       /* GMT to local correction */
+    uint32_t sigfigs;        /* accuracy of timestamps */
+    uint32_t snaplen;        /* max length of captured packets, in octets */
+    uint32_t network;        /* data link type */
+} pcap_hdr_t;
 
-#define LINKTYPE_ETHERNET (1)
+typedef struct pcaprec_hdr_s {
+    uint32_t ts_sec;         /* timestamp seconds */
+    uint32_t ts_usec;        /* timestamp microseconds */
+    uint32_t incl_len;       /* number of octets of packet saved in file */
+    uint32_t orig_len;       /* actual length of packet */
+} pcaprec_hdr_t;
 
-struct pkt_rec_hdr {
-  uint32_t timestamp;
-  uint32_t timestamp_lower;
-  uint32_t captured_pkt_len;
-  uint32_t original_pkt_len;
-};
+#define STUB_ENABLED
+
+void stub_init();
+void stub_write_pkt(uint8_t* ptr, uint32_t size);
 
 #endif
