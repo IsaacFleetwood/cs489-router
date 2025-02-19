@@ -48,6 +48,9 @@ mac_addr_t interface_mac_addrs[] = {
 interface_config_t* interface_get_config(interface_id_t int_id) {
     return &interface_arr[int_id];
 }
+interface_id_t interface_get_wan_id() {
+    return 2; 
+}
 
 uint8_t interface_get_side(interface_id_t int_id) {
     return interface_get_config(int_id)->side;

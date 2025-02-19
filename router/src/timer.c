@@ -20,7 +20,7 @@ volatile struct delta_node* delta_list = NULL;
 
 struct pkt_list {
     struct pkt_list* next;
-    struct pkt_ipv4_hdr* pkt;
+    ipv4_hdr_t* pkt;
 };
 struct delta_node {
     struct delta_node* next;
@@ -100,7 +100,7 @@ void timer_handler() {
         } else {
             // Try to resend ARP packet
             interface_id_t int_id = get_interface_for_ip(delta_node->ip_addr);
-            struct pkt_arp_hdr arp_pkt = {
+            arp_hdr_t arp_pkt = {
                 .hardware_type = htons(0x0001), // Ethernet
                 .protocol_type = htons(0x0800), // IPv4
                 .hardware_length = 6,
@@ -202,7 +202,7 @@ void timer_update_packets(ip_addr_t dst) {
     free(delta_node);
 }
 
-void timer_add_packet(struct pkt_ipv4_hdr* pkt, interface_id_t int_id, ip_addr_t dst) {
+void timer_add_packet(ipv4_hdr_t* pkt, interface_id_t int_id, ip_addr_t dst) {
     pthread_mutex_lock(&timer_mutex);
 
     int total_time = 0;
@@ -225,7 +225,7 @@ void timer_add_packet(struct pkt_ipv4_hdr* pkt, interface_id_t int_id, ip_addr_t
     }
     // ARP packet needs to be sent. 1s delay needs to be added to delta list.
 
-    struct pkt_arp_hdr arp_pkt = {
+    arp_hdr_t arp_pkt = {
       .hardware_type = htons(0x0001), // Ethernet
       .protocol_type = htons(0x0800), // IPv4
       .hardware_length = 6,

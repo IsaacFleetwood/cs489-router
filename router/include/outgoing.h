@@ -12,7 +12,7 @@ struct ip_pseudo_hdr {
   uint16_t udp_length;
 };
 
-void send_ipv4(struct pkt_ipv4_hdr* pkt);
-void send_arp(struct pkt_arp_hdr* pkt, interface_id_t int_id);
+void send_ipv4(ipv4_hdr_t* pkt);
+void send_arp(arp_hdr_t* pkt, interface_id_t int_id);
 
 #endif

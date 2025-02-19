@@ -3,17 +3,27 @@
 
 #include "../include/timer.h"
 #include "../include/stub.h"
+#include "../include/stub.h"
 
+// #define TEST_ENABLED
 #define DRIVER_ENABLED
 int driver_main(int argc, char** argv);
+void testcase_run();
 
 int main(int argc, char** argv) {
+
 
   timer_init();
 
   #ifdef STUB_ENABLED
   stub_init();
   #endif
+
+  #ifdef TEST_ENABLED
+  testcase_run();
+  return 0;
+  #endif
+
   #ifdef DRIVER_ENABLED
   return driver_main(argc, argv);
   #endif

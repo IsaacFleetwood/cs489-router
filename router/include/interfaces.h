@@ -30,6 +30,7 @@ extern ip_addr_t wan_gateway_ip; // Given by DHCP
 
 interface_id_t get_interface_for_ip(ip_addr_t);
 interface_config_t* interface_get_config(interface_id_t);
+interface_id_t interface_get_wan_id();
 
 ip_addr_t interface_get_subnet_mask(interface_id_t);
 ip_addr_t interface_get_ip(interface_id_t);

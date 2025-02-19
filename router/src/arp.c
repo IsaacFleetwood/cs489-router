@@ -12,7 +12,7 @@
 // Note: Must use mutexes for parallelization.
 
 
-void arp_handle(struct pkt_arp_hdr* pkt, interface_id_t int_id, mac_addr_t src) {
+void arp_handle(arp_hdr_t* pkt, interface_id_t int_id, mac_addr_t src) {
   // ??? - Does the router itself need to handle responding to ARP packets to itself? (Will the Linux Kernel do it for us? Answer: Kinda, it depends.)
 
   if(ntohs(pkt->protocol_type) != 0x0800)

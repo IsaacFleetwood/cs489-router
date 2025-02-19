@@ -12,8 +12,8 @@ void wifi_handle(pkt_wifi_hdr* pkt_ptr, interface_id_t int_id) {
   // And determine the position of the inner network-layer packet.
   uint8_t* inner_pkt_data;
   if(ethertype == ETHERTYPE_IPV4) {
-    ipv4_handle((struct pkt_ipv4_hdr*) inner_pkt_data, int_id);
+    ipv4_handle((ipv4_hdr_t*) inner_pkt_data, int_id);
   } else if(ethertype == ETHERTYPE_ARP) {
-    arp_handle((struct pkt_arp_hdr*) inner_pkt_data, int_id, pkt_ptr->addr_src);
+    arp_handle((arp_hdr_t*) inner_pkt_data, int_id, pkt_ptr->addr_src);
   }
 }

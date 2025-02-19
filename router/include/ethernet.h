@@ -5,17 +5,16 @@
 #include "interfaces.h"
 #include "structs.h"
 
-struct pkt_ether_hdr {
-  mac_addr_t dst;
-  mac_addr_t src;
-  uint16_t type; // NOTE: Must use ntohs to convert to host-byte order.
-  uint8_t data[0];
-};
-typedef struct pkt_ether_hdr pkt_ether_hdr;
+/*** Ethernet Frame Structure ***/
+typedef struct {
+  mac_addr_t mac_dst;     // Destination MAC address
+  mac_addr_t mac_src;     // Source MAC address
+  uint16_t ethertype;     // Ethernet frame type (IPv4, ARP, etc.)
+} ethernet_hdr_t;
 
 #define ETHERTYPE_IPV4 (0x0800)
 #define ETHERTYPE_ARP (0x0806)
 
-void ethernet_handle(pkt_ether_hdr* pkt_ptr, interface_id_t int_id);
+void ethernet_handle(ethernet_hdr_t* pkt_ptr, interface_id_t int_id);
 
 #endif

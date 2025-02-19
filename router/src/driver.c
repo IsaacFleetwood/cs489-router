@@ -43,7 +43,7 @@ int driver_main(int argc, char** argv) {
     //memset(buffer, 0, file_header.snaplen);
     fread(buffer, record_header.incl_len, 1, file);
     buffer[record_header.incl_len] = 0;
-    ethernet_handle((pkt_ether_hdr*) buffer, int_id);
+    ethernet_handle((ethernet_hdr_t*) buffer, int_id);
     index += 1;
   }
   free(buffer);

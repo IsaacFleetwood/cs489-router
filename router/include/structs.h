@@ -48,13 +48,6 @@ typedef struct {
   uint32_t entry_count;                    // Current number of entries
 } napt_table_t;
 
-/*** Ethernet Frame Structure ***/
-typedef struct {
-  mac_addr_t mac_dst;     // Destination MAC address
-  mac_addr_t mac_src;     // Source MAC address
-  uint16_t ethertype;     // Ethernet frame type (IPv4, ARP, etc.)
-} ethernet_hdr_t;
-
 /*** UPD Header Structure ***/
 typedef struct {
   uint16_t port_src;      // Source port
@@ -87,20 +80,5 @@ typedef struct {
   uint16_t checksum;      // TCP checksum
   uint16_t urgent_ptr;    // Urgent pointer
 } tcp_hdr_t;
-
-struct pkt_udp_hdr {
-    uint16_t port_src;
-    uint16_t port_dst;
-    uint16_t length;
-    uint16_t checksum;
-};
-struct pkt_tcp_hdr {
-    uint32_t idk_1;
-    uint32_t idk_2;
-    uint32_t idk_3;
-    uint32_t idk_4;
-    uint16_t checksum;
-    uint32_t idk_5;
-};
 
 #endif

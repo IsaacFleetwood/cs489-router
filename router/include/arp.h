@@ -4,7 +4,7 @@
 #include "ethernet.h"
 #include "interfaces.h"
 
-struct pkt_arp_hdr {
+typedef struct {
   uint16_t hardware_type;
   uint16_t protocol_type;
   uint8_t hardware_length;
@@ -14,8 +14,8 @@ struct pkt_arp_hdr {
   ip_addr_t sender_ip;
   mac_addr_t target_mac;
   ip_addr_t target_ip;
-};
+} arp_hdr_t;
 
-void arp_handle(struct pkt_arp_hdr* pkt, interface_id_t int_id, mac_addr_t src);
+void arp_handle(arp_hdr_t* pkt, interface_id_t int_id, mac_addr_t src);
 
 #endif

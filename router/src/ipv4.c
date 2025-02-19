@@ -1,11 +1,11 @@
+#include <arpa/inet.h>
+#include <stdlib.h>
 
 #include "../include/ipv4.h"
 #include "../include/interfaces.h"
 #include "../include/structs.h"
 #include "../include/utils.h"
 #include "../include/outgoing.h"
-
-#define ROUTER_PUBLIC_IP 0xC0A80001 // place holder for now
 
 // TODO: Data structure for storing ip-port tuples.
 // Keep track of which ip-port pairs to expect data from, so the firewall is open for them.
@@ -16,23 +16,24 @@ static napt_table_t napt_table = { .entry_count = 0};
 // TODO: If packet size is > Ethernet's MTU. It will need to be fragmented.
 // This will happen when WiFi packets need to be sent over Ethernet.
 
-void ipv4_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
+void ipv4_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
 
   // TODO: Check protocol.
   // Only handle packets of desired protocol. (TCP, UDP, ICMP for starters.)
 
   if(interface_get_side(int_id) == INT_SIDE_WAN) {
-    // TODO: Check if IP is actually our public ip (could be a neighbor's)
+    if(!ip_addr_equals(pkt->ip_dst, interface_get_ip(int_id))) {
+      // Check if the destination is our router. If not, disregard packet.
+      // TODO: Do mac address checking on link-layer level also?
+      return;
+    }
     napt_inc_handle(pkt, int_id);
     return;
   }
 
-  ip_addr_t src; // TODO: Read these from the packet.
-  ip_addr_t dst;
-
   interface_config_t* int_config = interface_get_config(int_id);
   
-  interface_id_t out_int_id = get_interface_for_ip(dst);
+  interface_id_t out_int_id = get_interface_for_ip(pkt->ip_dst);
   // If they are on the same network, disregard the packet.
   if(out_int_id == int_id) {
     return;
@@ -41,7 +42,7 @@ void ipv4_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
     // Forward packet to out interface on LAN.
     // No need to do NAPT, because its on the LAN side.
 
-    // TODO: Send packet over "out_int_id" LAN interface.
+    send_ipv4(pkt);
   } else {
     // If it reaches here, it is going from LAN to WAN.
     // So do NAPT.
@@ -49,7 +50,7 @@ void ipv4_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
   }
 }
 
-void napt_out_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
+void napt_out_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
   // Assume that the packet is already determined to be leaving the network
   uint32_t ip_src = IP_TO_UINT(pkt->ip_src);
   uint32_t ip_dst = IP_TO_UINT(pkt->ip_dst);
@@ -76,13 +77,14 @@ void napt_out_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
 
   // Generate a new source port (random high port)
   uint16_t new_port_src = (rand() % (60000 - 1024)) + 1024;
+  ip_addr_t public_ip = interface_get_ip(interface_get_wan_id());
 
   // Store the mapping in the NAT table
   if (napt_table.entry_count < MAX_NAPT_ENTRIES) {
     napt_entry_t* entry = &napt_table.entries[napt_table.entry_count++];
     entry->lan_ip = pkt->ip_src;
     entry->lan_port.value = port_src;
-    UINT_TO_IP(ROUTER_PUBLIC_IP, entry->public_ip);
+    entry->public_ip = public_ip;
     entry->public_port.value = new_port_src;
     entry->dst_ip = pkt->ip_dst;
     entry->dst_port.value = port_dst;
@@ -93,7 +95,7 @@ void napt_out_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
   }
 
   // Modify packet - Change Source IP to Public IP
-  UINT_TO_IP(ROUTER_PUBLIC_IP, pkt->ip_src);
+  pkt->ip_src = public_ip;
 
   // Update Transport Layer Header with New Source Port
   if (protocol == 6) { // TCP
@@ -112,7 +114,7 @@ void napt_out_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
 
 
 // Handle incoming packets from WAN
-void napt_inc_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
+void napt_inc_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
   uint32_t ip_dst = IP_TO_UINT(pkt->ip_dst);
 
   // Calculate the offset for the transport layer (TCP/UDP)
