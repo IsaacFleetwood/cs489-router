@@ -88,4 +88,19 @@ typedef struct {
   uint16_t urgent_ptr;    // Urgent pointer
 } tcp_hdr_t;
 
+struct pkt_udp_hdr {
+    uint16_t port_src;
+    uint16_t port_dst;
+    uint16_t length;
+    uint16_t checksum;
+};
+struct pkt_tcp_hdr {
+    uint32_t idk_1;
+    uint32_t idk_2;
+    uint32_t idk_3;
+    uint32_t idk_4;
+    uint16_t checksum;
+    uint32_t idk_5;
+};
+
 #endif

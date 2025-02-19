@@ -24,11 +24,16 @@ typedef struct interface_config {
   uint8_t side: 1; // WAN or LAN
 } interface_config_t;
 
+extern ip_addr_t wan_network_ip; // Given by DHCP
+extern int wan_cidr_prefix_len;  // Given by DHCP
+extern ip_addr_t wan_gateway_ip; // Given by DHCP
+
 interface_id_t get_interface_for_ip(ip_addr_t);
 interface_config_t* interface_get_config(interface_id_t);
 
-ip_addr_t interface_get_subnet_mask(interface_config_t*);
+ip_addr_t interface_get_subnet_mask(interface_id_t);
 ip_addr_t interface_get_ip(interface_id_t);
+ip_addr_t interface_get_network_ip(interface_id_t);
 uint8_t interface_get_side(interface_id_t);
 uint8_t interface_get_type(interface_id_t);
 mac_addr_t interface_get_mac_addr(interface_id_t);

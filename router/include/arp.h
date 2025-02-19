@@ -5,8 +5,15 @@
 #include "interfaces.h"
 
 struct pkt_arp_hdr {
-  // TODO: Fill in.
-  // https://en.wikipedia.org/wiki/Address_Resolution_Protocol
+  uint16_t hardware_type;
+  uint16_t protocol_type;
+  uint8_t hardware_length;
+  uint8_t protocol_length;
+  uint16_t operation;
+  mac_addr_t sender_mac;
+  ip_addr_t sender_ip;
+  mac_addr_t target_mac;
+  ip_addr_t target_ip;
 };
 
 void arp_handle(struct pkt_arp_hdr* pkt, interface_id_t int_id, mac_addr_t src);
