@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "ipv4.h": "c",
+        "outgoing.h": "c"
+    }
+}
