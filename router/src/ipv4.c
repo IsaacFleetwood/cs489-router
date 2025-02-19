@@ -49,56 +49,113 @@ void ipv4_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
   }
 }
 
-// Handle outgoing packets from LAN to WAN
 void napt_out_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
-  // Assume that we already know the packet is going out of the network (subnet mask is already checked)
-  uint32_t src_ip = IP_TO_UINT(pkt->src_ip);
-  uint16_t src_port = pkt->protocol == 6 ? ((transport_hdr_t*)pkt)->src_port : 0; // Handle TCP/UDP only
-  uint32_t dest_ip = IP_TO_UINT(pkt->dst_ip);
-  uint16_t dest_port = pkt->protocol == 6 ? ((transport_hdr_t*)pkt)->dest_port : 0;
+  // Assume that the packet is already determined to be leaving the network
+  uint32_t ip_src = IP_TO_UINT(pkt->ip_src);
+  uint32_t ip_dst = IP_TO_UINT(pkt->ip_dst);
 
-  // Generate new public port
-  uint16_t new_src_port = (rand() % (60000 - 1024) + 1024);
+  // Calculate the offset for the transport layer (TCP/UDP)
+  uint8_t* transport_ptr = (uint8_t*)pkt + ((pkt->ver_ihl & 0x0F) * 4); // Extract IHL
 
-  // Store the mapping in the NAPT table
-  if (napt_table.entry_count < MAX_NAPT_ENTRIES) {
-    napt_entry_t* entry = &napt_table.entries[napt_table.entry_count++];
-    entry->lan_ip = pkt->src_ip;
-    entry->lan_port.value = src_port;
-    UNIT_TO_IP(ROUTER_PUBLIC_IP, entry->public_ip);
-    entry->public_port.value = new_src_port;
-    entry->dest_ip = pkt->dst_ip;
-    entry->dest_port.value = dest_port;
-    entry->timestamp = get_time(); // TODO: Implement this function
+  uint16_t port_src = 0, port_dst = 0;
+  uint8_t protocol = pkt->protocol;
+
+  // Check if the protocol is TCP (6) or UDP (17) and extract the ports
+  if (protocol == 6) {  // TCP
+    tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
+    port_src = ntohs(tcp_hdr->port_src);
+    port_dst = ntohs(tcp_hdr->port_dst);
+  } else if (protocol == 17) {  // UDP
+    udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
+    port_src = ntohs(udp_hdr->port_src);
+    port_dst = ntohs(udp_hdr->port_dst);
+  } else {
+    // Not TCP or UDP, drop packet
+    return;
   }
 
-  // Modify the packet to reflect the new public IP and port
-  UNIT_TO_IP(ROUTER_PUBLIC_IP, pkt->src_ip);
-  ((transport_hdr_t*)pkt)->src_port = new_src_port;
-  pkt->checksum = calculate_checksum(pkt);  // TODO: Implement this function
+  // Generate a new source port (random high port)
+  uint16_t new_port_src = (rand() % (60000 - 1024)) + 1024;
+
+  // Store the mapping in the NAT table
+  if (napt_table.entry_count < MAX_NAPT_ENTRIES) {
+    napt_entry_t* entry = &napt_table.entries[napt_table.entry_count++];
+    entry->lan_ip = pkt->ip_src;
+    entry->lan_port.value = port_src;
+    UINT_TO_IP(ROUTER_PUBLIC_IP, entry->public_ip);
+    entry->public_port.value = new_port_src;
+    entry->dst_ip = pkt->ip_dst;
+    entry->dst_port.value = port_dst;
+    entry->timestamp = 0;  // 0 for now, may implement timeout handling later
+  } else {
+    // NAPT table full, drop the packet
+    return;
+  }
+
+  // Modify packet - Change Source IP to Public IP
+  UINT_TO_IP(ROUTER_PUBLIC_IP, pkt->ip_src);
+
+  // Update Transport Layer Header with New Source Port
+  if (protocol == 6) { // TCP
+    tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
+    tcp_hdr->port_src = htons(new_port_src);
+  } else if (protocol == 17) { // UDP
+    udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
+    udp_hdr->port_src = htons(new_port_src);
+  }
+
+  // Checksum is handled in outgoing.c in send_ipv4() function
+
+  // Forward packet to WAN
+  send_ipv4(pkt);
 }
+
 
 // Handle incoming packets from WAN
 void napt_inc_handle(struct pkt_ipv4_hdr* pkt, interface_id_t int_id) {
-  uint32_t dest_ip = IP_TO_UINT(pkt->dst_ip);
-  uint16_t dest_port = pkt->protocol = 6 ? ((transport_hdr_t*)pkt)->dest_port : 0;
+  uint32_t ip_dst = IP_TO_UINT(pkt->ip_dst);
 
-  // Check table for ip-port pair.
+  // Calculate the offset for the transport layer (TCP/UDP)
+  uint8_t* transport_ptr = (uint8_t*)pkt + ((pkt->ver_ihl & 0x0F) * 4); // Extract IHL
+
+  uint16_t port_dst = 0;
+  uint8_t protocol = pkt->protocol;
+
+  // Extract destination port for TCP or UDP
+  if (protocol == 6) { // TCP
+    tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
+    port_dst = ntohs(tcp_hdr->port_dst);
+  } else if (protocol == 17) { // UDP
+    udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
+    port_dst = ntohs(udp_hdr->port_dst);
+  } else {
+    // Not TCP or UDP, drop packet
+    return;
+  }
+
+  // Check the NAPT table for a matching public IP and port
   for (int i = 0; i < napt_table.entry_count; i++) {
-    if (IP_TO_UINT(napt_table.entries[i].public_ip) == dest_ip && 
-        napt_table.entries[i].dest_port.value == dest_port) {
+    if (IP_TO_UINT(napt_table.entries[i].public_ip) == ip_dst && 
+      napt_table.entries[i].public_port.value == port_dst) {
 
-          // Restore the original IP and port
-          pkt->dst_ip = napt_table.entries[i].lan_ip;
-          ((transport_hdr_t*)pkt)->dest_port = napt_table.entries[i].lan_port.value;
-          pkt->checksum = calculate_checksum(pkt);  // TODO: Implement this function
+      // Restore the original LAN IP and port
+      pkt->ip_dst = napt_table.entries[i].lan_ip;
 
-          // Send the packet towards the LAN side to the IP that sent the original outgoing packet
-          send_packet_to_lan(pkt);  // TODO: Implement this function
-          return;
+      if (protocol == 6) { // TCP
+        tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
+        tcp_hdr->port_dst = htons(napt_table.entries[i].lan_port.value);
+      } else if (protocol == 17) { // UDP
+        udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
+        udp_hdr->port_dst = htons(napt_table.entries[i].lan_port.value);
+      }
+
+      // Checksum is handled in outgoing.c in send_ipv4() function
+
+      // Forward the packet to the LAN
+      send_ipv4(pkt);
+      return;
     }
   }
 
-  // If not found, then throw out the packet (firewall behavior)
-  // If found, then send the packet towards the LAN side to the IP that sent the original outgoing packet.
+  // If no match found, drop the packet (firewall behavior)
 }
