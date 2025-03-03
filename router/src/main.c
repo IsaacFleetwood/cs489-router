@@ -1,45 +1,123 @@
-#include <stdio.h>
+#include <arpa/inet.h>
 #include <ifaddrs.h>
+#include <linux/if_packet.h>
+#include <net/ethernet.h>
+#include <net/if.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include "../include/timer.h"
 #include "../include/stub.h"
 #include "../include/stub.h"
 
+
+#define ETHER_MTU (1518)
+
+// struct mac_addr {
+//     unsigned char bytes[6];
+// };
+
+struct ether_hdr {
+    struct mac_addr mac_dst;
+    struct mac_addr mac_src;
+    uint16_t ethertype;
+};
+
+char* mac_addr_to_string(struct mac_addr mac_addr) {
+    char* mac_addr_str = malloc(18);
+    for(int i = 0; i < 6; i++) {
+        sprintf(&mac_addr_str[i*3], "%02x", mac_addr.bytes[i]);
+        if(i == 5) {
+            mac_addr_str[i*3+2] = '\0';
+        } else {
+            mac_addr_str[i*3+2] = ':';
+        }
+    }
+    return mac_addr_str;
+}
+
 // #define TEST_ENABLED
-#define DRIVER_ENABLED
+// #define DRIVER_ENABLED
+
 int driver_main(int argc, char** argv);
 void testcase_run();
 
 int main(int argc, char** argv) {
-
-
+  // printf("hi\n");
   timer_init();
 
-  #ifdef STUB_ENABLED
-  stub_init();
-  #endif
+  // #ifdef STUB_ENABLED
+  // stub_init();
+  // #endif
 
-  #ifdef TEST_ENABLED
-  testcase_run();
-  return 0;
-  #endif
+  // #ifdef TEST_ENABLED
+  // testcase_run();
+  // return 0;
+  // #endif
 
-  #ifdef DRIVER_ENABLED
-  return driver_main(argc, argv);
-  #endif
+  // #ifdef DRIVER_ENABLED
+  // return driver_main(argc, argv);
+  // #endif
 
-  // https://stackoverflow.com/questions/4139405/how-can-i-get-to-know-the-ip-address-for-interfaces-in-c
-  struct ifaddrs *addrs,*tmp;
+  // The network interfaces are:
+  // lo and enp0s1 on my mac's VM
 
-  getifaddrs(&addrs);
-  tmp = addrs;
+  // void ethernet_handle(ethernet_hdr_t* pkt_ptr, interface_id_t int_id)
 
-  while (tmp) {
-    if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
-      printf("%s\n", tmp->ifa_name);
+  char* ifname = "lo";
+  int sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+  // add err check
 
-    tmp = tmp->ifa_next;
+  struct sockaddr_ll sockaddr;
+	memset(&sockaddr, 0, sizeof(sockaddr));
+	sockaddr.sll_family = PF_PACKET;
+	sockaddr.sll_protocol = htons(ETH_P_ALL);
+	sockaddr.sll_ifindex = if_nametoindex(ifname);
+	if(bind(sockfd, (struct sockaddr*) &sockaddr, sizeof(sockaddr)) < 0) {
+		printf("Unable to bind to device.\n");
+		return 1;
+	}
+
+  char* buffer = malloc(ETHER_MTU);
+    // add err check
+
+  while(1) {
+		int bytes_rec = read(sockfd, buffer, ETHER_MTU);
+
+    struct ether_hdr* in_ether = (struct ether_hdr*) buffer;
+		uint16_t ethertype = ntohs(in_ether->ethertype);
+
+    char* mac_src_str = mac_addr_to_string(in_ether->mac_src);
+		char* mac_dst_str = mac_addr_to_string(in_ether->mac_dst);
+
+    printf("Src: %s Dst: %s Type: %#06x\n", mac_src_str, mac_dst_str, ethertype);
+
+    free(mac_src_str);
+    free(mac_dst_str);
   }
 
-  freeifaddrs(addrs);
+  free(buffer);
+  close(sockfd);
+  return 0;
+
+  // https://stackoverflow.com/questions/4139405/how-can-i-get-to-know-the-ip-address-for-interfaces-in-c
+  // struct ifaddrs *addrs = {0};
+  // struct ifaddrs *tmp = {0};
+
+  // getifaddrs(&addrs);
+  // tmp = addrs;
+
+  // while (tmp) {
+  //   // printf("tmp entry\n");
+  //   if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
+  //     printf("%s\n", tmp->ifa_name);
+
+  //   tmp = tmp->ifa_next;
+  // }
+
+  // freeifaddrs(addrs);
 }
