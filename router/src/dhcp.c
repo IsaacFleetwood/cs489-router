@@ -40,7 +40,7 @@ void init_dhcp_pool() {
         perror("Invalid end IP");
         exit(EXIT_FAILURE);
     }
-    printf("✅ DHCP Pool Range: %s - %s\n", inet_ntoa(dhcp_pool_start), inet_ntoa(dhcp_pool_end));
+    printf("DHCP Pool Range: %s - %s\n", inet_ntoa(dhcp_pool_start), inet_ntoa(dhcp_pool_end));
 }
 
 void dhcp_server_start();
