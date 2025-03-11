@@ -28,8 +28,20 @@ typedef struct {
 
 static dhcp_lease_t lease_table[MAX_LEASES];  // DHCP lease table
 
-struct in_addr dhcp_pool_start = { .s_addr = inet_addr("192.168.1.100") };
-struct in_addr dhcp_pool_end = { .s_addr = inet_addr("192.168.1.110") };
+struct in_addr dhcp_pool_start;
+struct in_addr dhcp_pool_end;
+
+void init_dhcp_pool() {
+    if (inet_aton("192.168.1.100", &dhcp_pool_start) == 0) {
+        perror("Invalid start IP");
+        exit(EXIT_FAILURE);
+    }
+    if (inet_aton("192.168.1.110", &dhcp_pool_end) == 0) {
+        perror("Invalid end IP");
+        exit(EXIT_FAILURE);
+    }
+    printf("✅ DHCP Pool Range: %s - %s\n", inet_ntoa(dhcp_pool_start), inet_ntoa(dhcp_pool_end));
+}
 
 void dhcp_server_start();
 void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, int recv_len);
@@ -42,6 +54,8 @@ void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr a
  * Start the DHCP server, listening on UDP port 67
  */
 void dhcp_server_start() {
+    init_dhcp_pool();  // **Initialize IP pool before using it!**
+
     int sockfd;
     struct sockaddr_in server_addr, client_addr;
     uint8_t buffer[DHCP_BUFFER_SIZE];
