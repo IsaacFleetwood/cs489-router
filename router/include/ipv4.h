@@ -25,6 +25,13 @@ typedef struct {
   ip_addr_t ip_dst;         // Destination IP Address (32 bits)
 } __attribute__((packed)) ipv4_hdr_t;
 
+typedef struct {
+  ip_addr_t ip;
+  uint16_t port;
+  uint8_t protocol;
+} napt_key_t;
+
+void napt_init();
 void ipv4_handle(ipv4_hdr_t* pkt, interface_id_t int_id);
 
 void napt_inc_handle(ipv4_hdr_t* pkt, interface_id_t int_id);

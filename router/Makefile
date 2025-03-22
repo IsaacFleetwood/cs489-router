@@ -6,10 +6,10 @@ BINS := $(SRCS:%.c=%.o)
 all: main
 
 %: %.o
-	${CC} $< -o $@
+	${CC} -g $< -o $@
 
 %.o: %.c
-	${CC} -c $< -o $@
+	${CC} -g -c $< -o $@
 
 clean:
 	rm -r ./src/*.o

@@ -6,12 +6,23 @@
 #include "../include/structs.h"
 #include "../include/utils.h"
 #include "../include/outgoing.h"
+#include "../include/hashmap.h"
 
 // TODO: Data structure for storing ip-port tuples.
 // Keep track of which ip-port pairs to expect data from, so the firewall is open for them.
 // Aswell, keep track of where the data needs to go (which local device), whenever it comes back into the network.
 
 static napt_table_t napt_table = { .entry_count = 0};
+
+hashmap_t napt_hashmap;
+
+size_t napt_key_hash(void* key_ptr) {
+  return hashmap_cyclic_hash(key_ptr, sizeof(hashmap_t));
+}
+
+void napt_init() {
+  napt_hashmap = hashmap_init(napt_key_hash, sizeof(napt_key_t), sizeof(napt_entry_t));
+}
 
 // TODO: If packet size is > Ethernet's MTU. It will need to be fragmented.
 // This will happen when WiFi packets need to be sent over Ethernet.
@@ -76,21 +87,31 @@ void napt_out_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
   }
 
   // Generate a new source port (random high port)
-  uint16_t new_port_src = (rand() % (60000 - 1024)) + 1024;
   ip_addr_t public_ip = interface_get_ip(interface_get_wan_id());
+  uint16_t new_port_src;
+  int attempts = 0;
+  while(attempts < 10) {
+    new_port_src = (rand() % (60000 - 1024)) + 1024;
 
-  // Store the mapping in the NAT table
-  if (napt_table.entry_count < MAX_NAPT_ENTRIES) {
-    napt_entry_t* entry = &napt_table.entries[napt_table.entry_count++];
-    entry->lan_ip = pkt->ip_src;
-    entry->lan_port.value = port_src;
-    entry->public_ip = public_ip;
-    entry->public_port.value = new_port_src;
-    entry->dst_ip = pkt->ip_dst;
-    entry->dst_port.value = port_dst;
-    entry->timestamp = 0;  // 0 for now, may implement timeout handling later
-  } else {
-    // NAPT table full, drop the packet
+    napt_key_t key = {.ip = ip_dst, .port = new_port_src, .protocol = protocol};
+    if(hashmap_get(&napt_hashmap, &key)) {
+      attempts += 1;
+      continue;
+    } else {
+      napt_entry_t value;
+      value.lan_ip = pkt->ip_src;
+      value.lan_port.value = port_src;
+      value.public_ip = public_ip;
+      value.public_port.value = new_port_src;
+      value.dst_ip = pkt->ip_dst;
+      value.dst_port.value = port_dst;
+      value.timestamp = 0;
+      hashmap_insert(&napt_hashmap, &key, &value);
+      break;
+    }
+  }
+  if(!(attempts < 10)) {
+    // Drop the packet if unable to find a port to send it.
     return;
   }
 
@@ -135,29 +156,27 @@ void napt_inc_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
     return;
   }
 
-  // Check the NAPT table for a matching public IP and port
-  for (int i = 0; i < napt_table.entry_count; i++) {
-    if (IP_TO_UINT(napt_table.entries[i].public_ip) == ip_dst && 
-      napt_table.entries[i].public_port.value == port_dst) {
+  // Check the NAPT table for a matching public IP and port (for the associated protocol)
+  napt_key_t key = {.ip = ip_dst, .port = port_dst, .protocol = protocol};
+  napt_entry_t* entry = hashmap_get(&napt_hashmap, &key);
+  if(entry == NULL) {
+    // If no match found, drop the packet (firewall behavior)
+    return;
+  }
+  
+  // Restore the original LAN IP and port
+  pkt->ip_dst = entry->lan_ip;
 
-      // Restore the original LAN IP and port
-      pkt->ip_dst = napt_table.entries[i].lan_ip;
-
-      if (protocol == 6) { // TCP
-        tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
-        tcp_hdr->port_dst = htons(napt_table.entries[i].lan_port.value);
-      } else if (protocol == 17) { // UDP
-        udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
-        udp_hdr->port_dst = htons(napt_table.entries[i].lan_port.value);
-      }
-
-      // Checksum is handled in outgoing.c in send_ipv4() function
-
-      // Forward the packet to the LAN
-      send_ipv4(pkt);
-      return;
-    }
+  if (protocol == 6) { // TCP
+    tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
+    tcp_hdr->port_dst = htons(entry->lan_port.value);
+  } else if (protocol == 17) { // UDP
+    udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
+    udp_hdr->port_dst = htons(entry->lan_port.value);
   }
 
-  // If no match found, drop the packet (firewall behavior)
+  // Checksum is handled in outgoing.c in send_ipv4() function
+
+  // Forward the packet to the LAN
+  send_ipv4(pkt);
 }
