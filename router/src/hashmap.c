@@ -4,6 +4,15 @@
 
 #include "../include/hashmap.h"
 
+void print_word(void* key, size_t size) {
+    uint8_t* ptr = (uint8_t*) key;
+    printf("0x");
+    for(int i = 0; i < size; i++) {
+        printf("%02x", ptr[i]);
+    }
+    printf("\n");
+}
+
 hashmap_t hashmap_init(size_t hash_func(void*), size_t size_key, size_t size_value) {
     size_t size_tag_map = (HASHMAP_SIZE_INIT * 2 + 7) / 8; // Round up.
     size_t size_data_map = (size_value + size_key) * HASHMAP_SIZE_INIT;
@@ -29,11 +38,15 @@ size_t hashmap_cyclic_hash(void* ptr, size_t size) {
 }
 
 uint8_t tag_get(hashmap_t* hashmap, size_t index) {
-    return (hashmap->data[index / 4] >> ((index % 4) * 2)) & 0x03;
+    size_t byte_index = index / 4;
+    size_t bit_index = (index % 4) * 2;
+    return (hashmap->data[byte_index] >> bit_index) & 0x03;
 }
 
 void tag_set(hashmap_t* hashmap, size_t index, uint8_t tag) {
-    hashmap->data[index / 4] = (hashmap->data[index / 4] & ~(0x03 << ((index % 4) * 2))) | (tag << ((index % 4) * 2));
+    size_t byte_index = index / 4;
+    size_t bit_index = (index % 4) * 2;
+    hashmap->data[byte_index] = (hashmap->data[byte_index] & ~(0x03 << bit_index)) | (tag << bit_index);
 }
 
 void hashmap_insert(hashmap_t* hashmap, void* key, void* value) {

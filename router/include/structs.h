@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#define MAX_NAPT_ENTRIES 256  // Maximum number of NAT table entries
-
 /*** MAC Address Structure (6 bytes) ***/
 typedef struct mac_addr {
   uint8_t bytes[6];
@@ -14,17 +12,6 @@ typedef struct mac_addr {
 typedef struct ip_addr {
   uint8_t bytes[4];
 } ip_addr_t;
-
-/*** Convert IP Address Struct <-> uint32_t for Easier Processing ***/
-#define IP_TO_UINT(ip) \
-    ((ip.bytes[0] << 24) | (ip.bytes[1] << 16) | (ip.bytes[2] << 8) | ip.bytes[3])
-
-#define UINT_TO_IP(uint, ip) { \
-    ip.bytes[0] = (uint >> 24) & 0xFF; \
-    ip.bytes[1] = (uint >> 16) & 0xFF; \
-    ip.bytes[2] = (uint >> 8) & 0xFF; \
-    ip.bytes[3] = uint & 0xFF; \
-}
 
 /*** Port Structure (2 bytes) ***/
 typedef struct port {
@@ -41,12 +28,6 @@ typedef struct {
   port_t dst_port;        // Destination port (external server)
   uint32_t timestamp;     // Timestamp for timeout handling
 } napt_entry_t;
-
-/*** NAPT Table Structure ***/
-typedef struct {
-  napt_entry_t entries[MAX_NAPT_ENTRIES];  // Array of NAPT entries
-  uint32_t entry_count;                    // Current number of entries
-} napt_table_t;
 
 /*** UPD Header Structure ***/
 typedef struct {

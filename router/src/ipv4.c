@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "../include/ipv4.h"
 #include "../include/interfaces.h"
@@ -8,29 +9,37 @@
 #include "../include/outgoing.h"
 #include "../include/hashmap.h"
 
+port_t to_port(uint16_t port) {
+  return (port_t) {.value = ntohs(port)};
+}
+uint16_t from_port(port_t port) {
+  return htons(port.value);
+}
+
 // TODO: Data structure for storing ip-port tuples.
 // Keep track of which ip-port pairs to expect data from, so the firewall is open for them.
 // Aswell, keep track of where the data needs to go (which local device), whenever it comes back into the network.
 
-static napt_table_t napt_table = { .entry_count = 0};
+hashmap_t napt_extern_hashmap;
+hashmap_t napt_intern_hashmap;
 
-hashmap_t napt_hashmap;
-
-size_t napt_key_hash(void* key_ptr) {
-  return hashmap_cyclic_hash(key_ptr, sizeof(hashmap_t));
+size_t napt_extern_key_hash(void* key_ptr) {
+  return hashmap_cyclic_hash(key_ptr, sizeof(napt_extern_key_t));
+}
+size_t napt_intern_key_hash(void* key_ptr) {
+  return hashmap_cyclic_hash(key_ptr, sizeof(napt_intern_key_t));
 }
 
 void napt_init() {
-  napt_hashmap = hashmap_init(napt_key_hash, sizeof(napt_key_t), sizeof(napt_entry_t));
+  // TODO: Consolidate into 1 entry table, with 2 key lookup maps? Maybe?
+  napt_extern_hashmap = hashmap_init(napt_extern_key_hash, sizeof(napt_extern_key_t), sizeof(napt_entry_t));
+  napt_intern_hashmap = hashmap_init(napt_intern_key_hash, sizeof(napt_intern_key_t), sizeof(napt_entry_t));
 }
 
 // TODO: If packet size is > Ethernet's MTU. It will need to be fragmented.
 // This will happen when WiFi packets need to be sent over Ethernet.
 
 void ipv4_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
-
-  // TODO: Check protocol.
-  // Only handle packets of desired protocol. (TCP, UDP, ICMP for starters.)
 
   if(interface_get_side(int_id) == INT_SIDE_WAN) {
     if(!ip_addr_equals(pkt->ip_dst, interface_get_ip(int_id))) {
@@ -52,7 +61,6 @@ void ipv4_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
   } else if(interface_get_side(out_int_id) == INT_SIDE_LAN) {
     // Forward packet to out interface on LAN.
     // No need to do NAPT, because its on the LAN side.
-
     send_ipv4(pkt);
   } else {
     // If it reaches here, it is going from LAN to WAN.
@@ -63,56 +71,70 @@ void ipv4_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
 
 void napt_out_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
   // Assume that the packet is already determined to be leaving the network
-  uint32_t ip_src = IP_TO_UINT(pkt->ip_src);
-  uint32_t ip_dst = IP_TO_UINT(pkt->ip_dst);
+  ip_addr_t ip_src = pkt->ip_src;
+  ip_addr_t ip_dst = pkt->ip_dst;
 
   // Calculate the offset for the transport layer (TCP/UDP)
   uint8_t* transport_ptr = (uint8_t*)pkt + ((pkt->ver_ihl & 0x0F) * 4); // Extract IHL
 
-  uint16_t port_src = 0, port_dst = 0;
+  port_t port_src;
+  port_t port_dst;
   uint8_t protocol = pkt->protocol;
 
   // Check if the protocol is TCP (6) or UDP (17) and extract the ports
   if (protocol == 6) {  // TCP
     tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
-    port_src = ntohs(tcp_hdr->port_src);
-    port_dst = ntohs(tcp_hdr->port_dst);
+    port_src = to_port(tcp_hdr->port_src);
+    port_dst = to_port(tcp_hdr->port_dst);
   } else if (protocol == 17) {  // UDP
     udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
-    port_src = ntohs(udp_hdr->port_src);
-    port_dst = ntohs(udp_hdr->port_dst);
+    port_src = to_port(udp_hdr->port_src);
+    port_dst = to_port(udp_hdr->port_dst);
   } else {
+    // TODO: Handle ICMP
     // Not TCP or UDP, drop packet
     return;
   }
 
   // Generate a new source port (random high port)
   ip_addr_t public_ip = interface_get_ip(interface_get_wan_id());
-  uint16_t new_port_src;
-  int attempts = 0;
-  while(attempts < 10) {
-    new_port_src = (rand() % (60000 - 1024)) + 1024;
+  port_t new_port_src;
 
-    napt_key_t key = {.ip = ip_dst, .port = new_port_src, .protocol = protocol};
-    if(hashmap_get(&napt_hashmap, &key)) {
+  // Check if there's already a mapping that was made.
+  napt_intern_key_t intern_key = {.ip_src = ip_src, .port_src = port_src, .protocol = protocol};
+  napt_entry_t* existing_res;
+  if((existing_res = hashmap_get(&napt_intern_hashmap, &intern_key))) {
+    // If so, just reuse the existing mapping
+    new_port_src = existing_res->public_port;
+    // TODO: Update the expiry timestamp.
+  } else {
+    // If not already existing, add a new one.
+    int attempts = 0;
+    while(attempts < 10) {
+      // Value is already in host order. Don't use to_port, which would change the byte order.
+      new_port_src.value = (rand() % (60000 - 1024)) + 1024;
+
+      napt_extern_key_t extern_key = {.ip_dst = ip_dst, .port_src = new_port_src, .port_dst = port_dst, .protocol = protocol};
+      if(!hashmap_contains(&napt_extern_hashmap, &extern_key)) {
+        napt_entry_t value;
+        value.lan_ip = ip_src;
+        value.lan_port = port_src;
+        value.public_ip = public_ip;
+        value.public_port = new_port_src;
+        value.dst_ip = ip_dst;
+        value.dst_port = port_dst;
+        value.timestamp = 0; // TODO: Setup timestamp for expiry
+        hashmap_insert(&napt_extern_hashmap, &extern_key, &value);
+        napt_intern_key_t intern_key = {.ip_src = ip_src, .port_src = port_src, .protocol = protocol};
+        hashmap_insert(&napt_intern_hashmap, &intern_key, &value);
+        break;
+      }
       attempts += 1;
-      continue;
-    } else {
-      napt_entry_t value;
-      value.lan_ip = pkt->ip_src;
-      value.lan_port.value = port_src;
-      value.public_ip = public_ip;
-      value.public_port.value = new_port_src;
-      value.dst_ip = pkt->ip_dst;
-      value.dst_port.value = port_dst;
-      value.timestamp = 0;
-      hashmap_insert(&napt_hashmap, &key, &value);
-      break;
     }
-  }
-  if(!(attempts < 10)) {
-    // Drop the packet if unable to find a port to send it.
-    return;
+    if(!(attempts < 10)) {
+      // Drop the packet if unable to find a port to send it.
+      return;
+    }
   }
 
   // Modify packet - Change Source IP to Public IP
@@ -121,10 +143,10 @@ void napt_out_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
   // Update Transport Layer Header with New Source Port
   if (protocol == 6) { // TCP
     tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
-    tcp_hdr->port_src = htons(new_port_src);
+    tcp_hdr->port_src = from_port(new_port_src);
   } else if (protocol == 17) { // UDP
     udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
-    udp_hdr->port_src = htons(new_port_src);
+    udp_hdr->port_src = from_port(new_port_src);
   }
 
   // Checksum is handled in outgoing.c in send_ipv4() function
@@ -136,29 +158,32 @@ void napt_out_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
 
 // Handle incoming packets from WAN
 void napt_inc_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
-  uint32_t ip_dst = IP_TO_UINT(pkt->ip_dst);
 
   // Calculate the offset for the transport layer (TCP/UDP)
   uint8_t* transport_ptr = (uint8_t*)pkt + ((pkt->ver_ihl & 0x0F) * 4); // Extract IHL
 
-  uint16_t port_dst = 0;
+  port_t port_src;
+  port_t port_dst;
   uint8_t protocol = pkt->protocol;
 
   // Extract destination port for TCP or UDP
   if (protocol == 6) { // TCP
     tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
-    port_dst = ntohs(tcp_hdr->port_dst);
+    port_dst = to_port(tcp_hdr->port_dst);
+    port_src = to_port(tcp_hdr->port_src);
   } else if (protocol == 17) { // UDP
     udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
-    port_dst = ntohs(udp_hdr->port_dst);
+    port_dst = to_port(udp_hdr->port_dst);
+    port_src = to_port(udp_hdr->port_src);
   } else {
+    // TODO: Handle ICMP
     // Not TCP or UDP, drop packet
     return;
   }
 
   // Check the NAPT table for a matching public IP and port (for the associated protocol)
-  napt_key_t key = {.ip = ip_dst, .port = port_dst, .protocol = protocol};
-  napt_entry_t* entry = hashmap_get(&napt_hashmap, &key);
+  napt_extern_key_t extern_key = {.ip_dst = pkt->ip_src, .port_src = port_dst, .port_dst = port_src, .protocol = protocol};
+  napt_entry_t* entry = hashmap_get(&napt_extern_hashmap, &extern_key);
   if(entry == NULL) {
     // If no match found, drop the packet (firewall behavior)
     return;
@@ -169,10 +194,10 @@ void napt_inc_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
 
   if (protocol == 6) { // TCP
     tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)transport_ptr;
-    tcp_hdr->port_dst = htons(entry->lan_port.value);
+    tcp_hdr->port_dst = from_port(entry->lan_port);
   } else if (protocol == 17) { // UDP
     udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
-    udp_hdr->port_dst = htons(entry->lan_port.value);
+    udp_hdr->port_dst = from_port(entry->lan_port);
   }
 
   // Checksum is handled in outgoing.c in send_ipv4() function
