@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "../include/ethernet.h"
 #include "../include/timer.h"
 #include "../include/stub.h"
 #include "../include/stub.h"
@@ -20,12 +21,6 @@
 // struct mac_addr {
 //     unsigned char bytes[6];
 // };
-
-struct ether_hdr {
-    struct mac_addr mac_dst;
-    struct mac_addr mac_src;
-    uint16_t ethertype;
-};
 
 char* mac_addr_to_string(struct mac_addr mac_addr) {
     char* mac_addr_str = malloc(18);
@@ -47,7 +42,6 @@ int driver_main(int argc, char** argv);
 void testcase_run();
 
 int main(int argc, char** argv) {
-  // printf("hi\n");
   timer_init();
 
   // #ifdef STUB_ENABLED
@@ -70,38 +64,53 @@ int main(int argc, char** argv) {
 
   char* ifname = "lo";
   int sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-  // add err check
+
+  if (sockfd < 0) {
+    perror("socket");
+    return 1;
+  }
 
   struct sockaddr_ll sockaddr;
 	memset(&sockaddr, 0, sizeof(sockaddr));
 	sockaddr.sll_family = PF_PACKET;
 	sockaddr.sll_protocol = htons(ETH_P_ALL);
 	sockaddr.sll_ifindex = if_nametoindex(ifname);
+
 	if(bind(sockfd, (struct sockaddr*) &sockaddr, sizeof(sockaddr)) < 0) {
 		printf("Unable to bind to device.\n");
 		return 1;
 	}
 
   char* buffer = malloc(ETHER_MTU);
-    // add err check
+  
+  if (buffer == NULL) {
+    perror("malloc");
+    return 1;
+  }
 
   while(1) {
 		int bytes_rec = read(sockfd, buffer, ETHER_MTU);
 
-    struct ether_hdr* in_ether = (struct ether_hdr*) buffer;
-		uint16_t ethertype = ntohs(in_ether->ethertype);
+    ethernet_hdr_t* eth_pkt = (ethernet_hdr_t*) buffer;
+		uint16_t ethertype = ntohs(eth_pkt->ethertype);
 
-    char* mac_src_str = mac_addr_to_string(in_ether->mac_src);
-		char* mac_dst_str = mac_addr_to_string(in_ether->mac_dst);
+    char* mac_src_str = mac_addr_to_string(eth_pkt->mac_src);
+		char* mac_dst_str = mac_addr_to_string(eth_pkt->mac_dst);
 
     printf("Src: %s Dst: %s Type: %#06x\n", mac_src_str, mac_dst_str, ethertype);
 
     free(mac_src_str);
     free(mac_dst_str);
+
+    interface_id_t intf_id = sockaddr.sll_ifindex; 
+
+    printf("1\n");
+    ethernet_handle(eth_pkt, intf_id);
   }
 
   free(buffer);
   close(sockfd);
+  
   return 0;
 
   // https://stackoverflow.com/questions/4139405/how-can-i-get-to-know-the-ip-address-for-interfaces-in-c
