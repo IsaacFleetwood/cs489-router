@@ -21,6 +21,8 @@ static dhcp_lease_t lease_table[MAX_LEASES];
 struct in_addr dhcp_pool_start;
 struct in_addr dhcp_pool_end;
 
+
+/* Manual Configuration of IP Pool */
 void init_dhcp_pool() {
     if (inet_aton("192.168.1.100", &dhcp_pool_start) == 0) {
         perror("Invalid start IP");
@@ -32,13 +34,6 @@ void init_dhcp_pool() {
     }
     printf("DHCP Pool Range: %s - %s\n", inet_ntoa(dhcp_pool_start), inet_ntoa(dhcp_pool_end));
 }
-
-void dhcp_server_start();
-void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, int recv_len);
-struct in_addr get_available_ip();
-struct in_addr extract_requested_ip(uint8_t* buffer);
-void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer);
-void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip);
 
 void dhcp_server_start() {
     init_dhcp_pool();
@@ -91,13 +86,13 @@ void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* bu
         options += 2 + option_len;
     }
 
-    if (message_type == DHCP_DISCOVER) {
+    if (message_type == DHCP_DISCOVER) {                                                    // Discover
         printf("Received DHCP Discover from %s\n", inet_ntoa(client_addr->sin_addr));
-        send_dhcp_offer(sockfd, client_addr, buffer);
-    } else if (message_type == DHCP_REQUEST) {
+        send_dhcp_offer(sockfd, client_addr, buffer);                                       // Offer
+    } else if (message_type == DHCP_REQUEST) {                                              // Request
         printf("Received DHCP Request from %s\n", inet_ntoa(client_addr->sin_addr));
         struct in_addr requested_ip = extract_requested_ip(buffer);
-        send_dhcp_ack(sockfd, client_addr, requested_ip);
+        send_dhcp_ack(sockfd, client_addr, requested_ip);                                   // Acknowledge
     }
 }
 

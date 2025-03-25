@@ -19,7 +19,11 @@
 #define DHCP_END 255
 
 // Function Declarations
-void dhcp_server_start();  // Starts the DHCP server
-void process_dhcp_request(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, int recv_len);
+void dhcp_server_start();
+void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, int recv_len);
+struct in_addr get_available_ip();
+struct in_addr extract_requested_ip(uint8_t* buffer);
+void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer);
+void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip);
 
 #endif // DHCP_H
