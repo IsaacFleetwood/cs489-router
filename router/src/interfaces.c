@@ -15,7 +15,7 @@ interface_config_t interface_arr[] = {
     .interface_ip = {192,168,2,1},
     .side = INT_SIDE_LAN,
     .type = INT_TYPE_ETHER,
-  },
+  },/*
   {
     .name = "wlo0",
     .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
@@ -24,7 +24,7 @@ interface_config_t interface_arr[] = {
     .interface_ip = {192,168,1,1},
     .side = INT_SIDE_LAN,
     .type = INT_TYPE_WIFI,
-  },
+  },*/
   {
     .name = "eth1",
     .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
@@ -44,6 +44,10 @@ mac_addr_t interface_mac_addrs[] = {
     {{0, 0, 0, 0, 0, 0}},
     {{0, 0, 0, 0, 0, 0}},
 };
+
+size_t interface_get_amt() {
+    return (sizeof(interface_arr)) / sizeof(interface_config_t);
+}
 
 interface_config_t* interface_get_config(interface_id_t int_id) {
     return &interface_arr[int_id];

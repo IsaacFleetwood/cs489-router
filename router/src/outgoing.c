@@ -1,8 +1,10 @@
 
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "../include/structs.h"
 #include "../include/outgoing.h"
@@ -110,9 +112,9 @@ void send_ipv4(ipv4_hdr_t* pkt) {
     new_ether_pkt->ethertype = ethertype;
 
     #ifdef STUB_ENABLED
-    stub_write_pkt((uint8_t*) new_ether_pkt, size);
+      stub_write_pkt((uint8_t*) new_ether_pkt, size);
     #else
-    // TODO: Output to actual ethernet interface.
+      write(interface_get_config(int_id)->fd, new_ether_pkt, size);
     #endif
 
     free(new_ether_pkt);
@@ -146,9 +148,9 @@ void send_arp(arp_hdr_t* pkt, interface_id_t int_id) {
     new_ether_pkt->ethertype = ethertype;
 
     #ifdef STUB_ENABLED
-    stub_write_pkt((uint8_t*) new_ether_pkt, size);
+      stub_write_pkt((uint8_t*) new_ether_pkt, size);
     #else
-    // TODO: Output to actual ethernet interface.
+      write(interface_get_config(int_id)->fd, new_ether_pkt, size);
     #endif
 
     free(new_ether_pkt);
