@@ -46,6 +46,8 @@ void testcase_run();
 void* thread_start(void* arg);
 
 int main(int argc, char** argv) {
+
+  napt_init();
   timer_init();
 
   #ifdef STUB_ENABLED
