@@ -44,18 +44,18 @@ void testcase_run();
 int main(int argc, char** argv) {
   timer_init();
 
-  // #ifdef STUB_ENABLED
-  // stub_init();
-  // #endif
+  #ifdef STUB_ENABLED
+  stub_init();
+  #endif
 
-  // #ifdef TEST_ENABLED
-  // testcase_run();
-  // return 0;
-  // #endif
+  #ifdef TEST_ENABLED
+  testcase_run();
+  return 0;
+  #endif
 
-  // #ifdef DRIVER_ENABLED
-  // return driver_main(argc, argv);
-  // #endif
+  #ifdef DRIVER_ENABLED
+  return driver_main(argc, argv);
+  #endif
 
   // The network interfaces are:
   // lo and enp0s1 on my mac's VM
