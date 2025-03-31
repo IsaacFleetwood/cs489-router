@@ -113,7 +113,7 @@ void napt_out_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
     while(attempts < 10) {
       // Value is already in host order. Don't use to_port, which would change the byte order.
       new_port_src.value = (rand() % (60000 - 1024)) + 1024;
-
+      printf("%d %d\n", new_port_src.value, htons(new_port_src.value));
       napt_extern_key_t extern_key = {.ip_dst = ip_dst, .port_src = new_port_src, .port_dst = port_dst, .protocol = protocol};
       if(!hashmap_contains(&napt_extern_hashmap, &extern_key)) {
         napt_entry_t value;
