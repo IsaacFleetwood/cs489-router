@@ -18,7 +18,7 @@ uint16_t calculate_checksum(void* ptr, int len) {
   uint32_t checksum = 0;
   if(len % 2 == 1)
     ((uint8_t*) ptr)[len] = 0;
-  for(int i = 0; i < len; i++) {
+  for(int i = 0; i < (len + 1) / 2; i++) {
     checksum += ((uint16_t*) ptr)[i];
   }
   while(checksum > 0xFFFF) {
