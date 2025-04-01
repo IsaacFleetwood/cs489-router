@@ -19,11 +19,12 @@
 #define DHCP_END 255
 
 // Function Declarations
+void init_dhcp_pool();
 void dhcp_server_start();
 void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, int recv_len);
 struct in_addr get_available_ip();
-struct in_addr extract_requested_ip(uint8_t* buffer);
-void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer);
-void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip);
+struct in_addr extract_requested_ip(uint8_t* buffer, int buf_len);
+void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* request_buffer);
+void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, uint8_t* request_buffer, struct in_addr allocated_ip);
 
 #endif // DHCP_H
