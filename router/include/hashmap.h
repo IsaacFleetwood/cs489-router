@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <pthread.h>
 
 typedef struct {
     size_t (*hash_func)(void*);
@@ -11,6 +12,8 @@ typedef struct {
     size_t size_value;
     size_t size_key;
     uint8_t* data;
+    pthread_mutex_t lock_;
+
 } hashmap_t;
 
 #define HASHMAP_SIZE_INIT (11)

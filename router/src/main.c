@@ -77,11 +77,14 @@ int main(int argc, char** argv) {
         tmp = tmp->ifa_next;
         continue;
       }
+
+      // gets info
       ip_addr_t ip = *((ip_addr_t*) &((struct sockaddr_in*) tmp->ifa_addr)->sin_addr);
       ip_addr_t mask = *((ip_addr_t*) &((struct sockaddr_in*) tmp->ifa_netmask)->sin_addr);
       ip_addr_t ip_network = apply_mask(mask, ip);
       ip_addr_t ip_gateway = ip_network;
       ip_gateway.bytes[3] |= 1;
+      // sets up WAN stuff
       wan_gateway_ip = ip_gateway;
       wan_cidr_prefix_len = prefix_len_get(mask);
       wan_network_ip = ip_network;
@@ -116,9 +119,12 @@ int main(int argc, char** argv) {
 }
 
 void* thread_start(void* arg) {
+  // get interface info
   interface_id_t int_id = (interface_id_t) ((size_t) arg);
+  // config get
   interface_config_t* config = interface_get_config(int_id);
 
+  // set up raw socket
   char* ifname = config->name;
   int sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
@@ -127,6 +133,7 @@ void* thread_start(void* arg) {
     return NULL;
   }
 
+  // more setup
   struct sockaddr_ll sockaddr;
 	memset(&sockaddr, 0, sizeof(sockaddr));
 	sockaddr.sll_family = PF_PACKET;
@@ -137,16 +144,22 @@ void* thread_start(void* arg) {
 		printf("Unable to bind to device.\n");
 		return NULL;
 	}
+  // config mod
   config->fd = sockfd;
 
+  // go thru all of the interfaces
+  // wait for each's fd to be set up
   int check_int_id = 0;
   for(int check_int_id = 0; check_int_id < interface_get_amt(); check_int_id++) {
+    // config get
     interface_config_t* config = interface_get_config(check_int_id);
     while(config->fd == 0) {
+      // interesting!
       sched_yield();
     }
   }
 
+  // set up buffer
   char* buffer = malloc(ETHER_MTU);
   
   if (buffer == NULL) {
@@ -155,21 +168,17 @@ void* thread_start(void* arg) {
   }
 
   while(1) {
+    // read packet
 		int bytes_rec = read(sockfd, buffer, ETHER_MTU);
 
     ethernet_hdr_t* eth_pkt = (ethernet_hdr_t*) buffer;
 		uint16_t ethertype = ntohs(eth_pkt->ethertype);
 
-    /*
-    char* mac_src_str = mac_addr_to_string(eth_pkt->mac_src);
-		char* mac_dst_str = mac_addr_to_string(eth_pkt->mac_dst);
-
-    printf("Src: %s Dst: %s Type: %#06x\n", mac_src_str, mac_dst_str, ethertype);
-
-    free(mac_src_str);
-    free(mac_dst_str);
-    */
-
+    // handle packet
+    // MT-WORK: not really any problems up until this pt.
+    // Starts out singlethreaded so no concurrency issues
+    // Then each thread sets up the fd for its own interface
+    // so again no overlap as far as I can tell.
     ethernet_handle(eth_pkt, int_id);
   }
 
