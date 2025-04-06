@@ -6,6 +6,9 @@ FILE* file;
 
 void stub_init() {
     file = fopen("./out.pcap", "wb+");
+    if (file == NULL) {
+        perror("fopen");
+    }
     pcap_hdr_t hdr = {
         .magic_number = 0xa1b2c3d4,
         .version_major = 2,
@@ -19,6 +22,10 @@ void stub_init() {
 }
 
 void stub_write_pkt(uint8_t* ptr, uint32_t size) {
+    if (file == NULL) {
+        fprintf(stderr, "ERROR: stub file is NULL\n");
+    }
+
     pcaprec_hdr_t entry_hdr = {
         .ts_sec = 0,
         .ts_usec = 0,

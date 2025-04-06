@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
   timer_init();
 
   #ifdef STUB_ENABLED
+  printf("stub is enabled\n");
   stub_init();
   #endif
 
