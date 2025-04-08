@@ -16,6 +16,21 @@ ip_addr_t create_subnet_mask(uint8_t cidr_prefix_len) {
   return mask;
 }
 
+int prefix_len_get(ip_addr_t mask) {
+  int prefix_len = 0;
+  for(int j = 0; j < 4; j++) {
+    int val = mask.bytes[j];
+    int byte_len = 8;
+    while(!(val & 1)) {
+      byte_len -= 1;
+      val = val >> 1;
+    }
+    prefix_len += byte_len;
+    if(byte_len != 8)
+      return prefix_len;
+  }
+}
+
 ip_addr_t apply_mask(ip_addr_t mask, ip_addr_t ip) {
   ip_addr_t res = {
     .bytes[0] = mask.bytes[0] & ip.bytes[0],

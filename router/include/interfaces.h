@@ -1,6 +1,7 @@
 #ifndef INTERFACES_H
 #define INTERFACES_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "structs.h"
@@ -22,12 +23,14 @@ typedef struct interface_config {
   uint8_t cidr_prefix_len;
   uint8_t type: 2; // Type of interface (ethernet, wifi, etc)
   uint8_t side: 1; // WAN or LAN
+  uint8_t fd: 5; // File descriptor of socket
 } interface_config_t;
 
 extern ip_addr_t wan_network_ip; // Given by DHCP
 extern int wan_cidr_prefix_len;  // Given by DHCP
 extern ip_addr_t wan_gateway_ip; // Given by DHCP
 
+size_t interface_get_amt();
 interface_id_t get_interface_for_ip(ip_addr_t);
 interface_config_t* interface_get_config(interface_id_t);
 interface_id_t interface_get_wan_id();
