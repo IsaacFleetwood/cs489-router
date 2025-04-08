@@ -24,6 +24,6 @@ void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* bu
 struct in_addr get_available_ip();
 struct in_addr extract_requested_ip(uint8_t* buffer);
 void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer);
-void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip);
+void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip, uint8_t* buffer);
 
 #endif // DHCP_H

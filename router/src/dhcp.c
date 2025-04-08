@@ -21,7 +21,6 @@ static dhcp_lease_t lease_table[MAX_LEASES];
 struct in_addr dhcp_pool_start;
 struct in_addr dhcp_pool_end;
 
-
 /* Manual Configuration of IP Pool */
 void init_dhcp_pool() {
     if (inet_aton("192.168.1.100", &dhcp_pool_start) == 0) {
@@ -33,6 +32,24 @@ void init_dhcp_pool() {
         exit(EXIT_FAILURE);
     }
     printf("DHCP Pool Range: %s - %s\n", inet_ntoa(dhcp_pool_start), inet_ntoa(dhcp_pool_end));
+}
+
+/* Validate IP address functions */
+int is_ip_in_pool(struct in_addr ip) {
+    uint32_t ip_val = ntohl(ip.s_addr);
+    return ip_val >= ntohl(dhcp_pool_start.s_addr) &&
+           ip_val <= ntohl(dhcp_pool_end.s_addr);
+}
+
+int is_ip_available(struct in_addr ip) {
+    for (int i = 0; i < MAX_LEASES; i++) {
+        if (lease_table[i].allocated &&
+            lease_table[i].ip.s_addr == ip.s_addr &&
+            time(NULL) < lease_table[i].lease_expiry) {
+            return 0; // IP is already leased
+        }
+    }
+    return 1; // IP is available
 }
 
 void dhcp_server_start() {
@@ -85,18 +102,26 @@ void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* bu
 
         options += 2 + option_len;
     }
-
-    if (message_type == DHCP_DISCOVER) {                                                    // Discover
-        printf("Received DHCP Discover from %s\n", inet_ntoa(client_addr->sin_addr));
-        send_dhcp_offer(sockfd, client_addr, buffer);                                       // Offer
-    } else if (message_type == DHCP_REQUEST) {                                              // Request
+                                                                                            //________DORA______
+    if (message_type == DHCP_DISCOVER) {                                                    //                  | Discover
+        printf("Received DHCP Discover from %s\n", inet_ntoa(client_addr->sin_addr));       //                  |
+        send_dhcp_offer(sockfd, client_addr, buffer);                                       //                  | Offer
+    } else if (message_type == DHCP_REQUEST) {
         printf("Received DHCP Request from %s\n", inet_ntoa(client_addr->sin_addr));
+    
         struct in_addr requested_ip = extract_requested_ip(buffer);
-        send_dhcp_ack(sockfd, client_addr, requested_ip);                                   // Acknowledge
-    }
+    
+        if (!is_ip_in_pool(requested_ip) || !is_ip_available(requested_ip)) {
+            send_dhcp_nak(sockfd, client_addr, buffer);
+        } else {
+            send_dhcp_ack(sockfd, client_addr, requested_ip, buffer);
+        }
+    }    
 }
 
 struct in_addr get_available_ip() {
+    cleanup_expired_leases();
+
     for (int i = 0; i < MAX_LEASES; i++) {
         if (!lease_table[i].allocated) {
             lease_table[i].allocated = 1;
@@ -135,6 +160,8 @@ void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffe
 
     uint8_t offer_packet[DHCP_BUFFER_SIZE] = {0};
     memcpy(offer_packet, buffer, 240);
+
+    memcpy(&offer_packet[16], &offered_ip.s_addr, 4); // yiaddr
     
     uint8_t* options = offer_packet + 240;
     *options++ = DHCP_OPTION_MESSAGE_TYPE;
@@ -151,14 +178,15 @@ void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffe
     sendto(sockfd, offer_packet, sizeof(offer_packet), 0, (struct sockaddr*)client_addr, sizeof(*client_addr));
 }
 
-void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip) {
+void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip, uint8_t* buffer) {
     printf("Sending DHCP ACK (IP: %s)\n", inet_ntoa(allocated_ip));
 
     uint8_t ack_packet[DHCP_BUFFER_SIZE] = {0};
-    memcpy(ack_packet, client_addr, sizeof(struct sockaddr_in)); // Ensure correct client data
+    memcpy(ack_packet, buffer, 240);
+
+    memcpy(&ack_packet[16], &allocated_ip.s_addr, 4); // yiaddr
 
     uint8_t* options = ack_packet + 240;
-
     *options++ = DHCP_OPTION_MESSAGE_TYPE;
     *options++ = 1;
     *options++ = DHCP_ACK;
@@ -171,4 +199,34 @@ void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr a
     *options++ = DHCP_END;
 
     sendto(sockfd, ack_packet, sizeof(ack_packet), 0, (struct sockaddr*)client_addr, sizeof(*client_addr));
+}
+
+void send_dhcp_nak(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer) {
+    printf("Sending DHCP NAK\n");
+
+    uint8_t nak_packet[DHCP_BUFFER_SIZE] = {0};
+    memcpy(nak_packet, buffer, 240); // Copy original BOOTP header for xid and chaddr
+
+    uint8_t* options = nak_packet + 240;
+    *options++ = DHCP_OPTION_MESSAGE_TYPE;
+    *options++ = 1;
+    *options++ = DHCP_NAK;
+    *options++ = DHCP_END;
+
+    sendto(sockfd, nak_packet, sizeof(nak_packet), 0,
+           (struct sockaddr*)client_addr, sizeof(*client_addr));
+}
+
+void cleanup_expired_leases() {
+    time_t now = time(NULL);
+
+    for (int i = 0; i < MAX_LEASES; i++) {
+        if (lease_table[i].allocated && lease_table[i].lease_expiry <= now) {
+            printf("Reclaiming expired lease: %s\n", inet_ntoa(lease_table[i].ip));
+            lease_table[i].allocated = 0;
+            lease_table[i].lease_start = 0;
+            lease_table[i].lease_expiry = 0;
+            memset(&lease_table[i].ip, 0, sizeof(struct in_addr));
+        }
+    }
 }
