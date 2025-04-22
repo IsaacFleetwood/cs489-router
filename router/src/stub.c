@@ -27,4 +27,8 @@ void stub_write_pkt(uint8_t* ptr, uint32_t size) {
     };
     fwrite(&entry_hdr, sizeof(pcaprec_hdr_t), 1, file);
     fwrite(ptr, size, 1, file);
+    fflush(file);
+    fclose(file);
+    rename("./out.pcap", "./out2.pcap");
+    file = fopen("./out.pcap", "ab");
 }

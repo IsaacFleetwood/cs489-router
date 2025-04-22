@@ -28,6 +28,7 @@ void update_ip_mac_pair(ip_mac_pair_t pair) {
     if(ip_mac_map_alloc_amt == 0)
       ip_mac_map_alloc_amt = 5;
     ip_mac_map_arr = realloc(ip_mac_map_arr, (ip_mac_map_alloc_amt * 2) * sizeof(ip_mac_pair_t));
+    ip_mac_map_alloc_amt *= 2;
   }
   // By this point, more space will be available, so add it to the end.
   ip_mac_map_arr[ip_mac_map_amt] = pair;

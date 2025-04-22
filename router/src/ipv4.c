@@ -41,6 +41,11 @@ void napt_init() {
 
 void ipv4_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
 
+  if(pkt->ip_dst.bytes[0] == 0xff && pkt->ip_dst.bytes[1] == 0xff &&
+    pkt->ip_dst.bytes[2] == 0xff && pkt->ip_dst.bytes[3] == 0xff) {
+    // Ignore Local Broadcast destination
+    return;
+  }
   if(interface_get_side(int_id) == INT_SIDE_WAN) {
     if(!ip_addr_equals(pkt->ip_dst, interface_get_ip(int_id))) {
       // Check if the destination is our router. If not, disregard packet.
@@ -103,6 +108,7 @@ void napt_out_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
   // Check if there's already a mapping that was made.
   napt_intern_key_t intern_key = {.ip_src = ip_src, .port_src = port_src, .protocol = protocol};
   napt_entry_t* existing_res;
+  hashmap_lock(&napt_intern_hashmap);
   if((existing_res = hashmap_get(&napt_intern_hashmap, &intern_key))) {
     // If so, just reuse the existing mapping
     new_port_src = existing_res->public_port;
@@ -110,10 +116,10 @@ void napt_out_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
   } else {
     // If not already existing, add a new one.
     int attempts = 0;
+    hashmap_lock(&napt_extern_hashmap);
     while(attempts < 10) {
       // Value is already in host order. Don't use to_port, which would change the byte order.
       new_port_src.value = (rand() % (60000 - 1024)) + 1024;
-
       napt_extern_key_t extern_key = {.ip_dst = ip_dst, .port_src = new_port_src, .port_dst = port_dst, .protocol = protocol};
       if(!hashmap_contains(&napt_extern_hashmap, &extern_key)) {
         napt_entry_t value;
@@ -131,11 +137,13 @@ void napt_out_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
       }
       attempts += 1;
     }
+    hashmap_unlock(&napt_extern_hashmap);
     if(!(attempts < 10)) {
       // Drop the packet if unable to find a port to send it.
       return;
     }
   }
+  hashmap_unlock(&napt_intern_hashmap);
 
   // Modify packet - Change Source IP to Public IP
   pkt->ip_src = public_ip;
@@ -183,9 +191,12 @@ void napt_inc_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
 
   // Check the NAPT table for a matching public IP and port (for the associated protocol)
   napt_extern_key_t extern_key = {.ip_dst = pkt->ip_src, .port_src = port_dst, .port_dst = port_src, .protocol = protocol};
+  hashmap_lock(&napt_extern_hashmap);
   napt_entry_t* entry = hashmap_get(&napt_extern_hashmap, &extern_key);
   if(entry == NULL) {
+    printf("Dropping packet on port %d\r\n", port_dst.value);
     // If no match found, drop the packet (firewall behavior)
+    hashmap_unlock(&napt_extern_hashmap);
     return;
   }
   
@@ -199,6 +210,7 @@ void napt_inc_handle(ipv4_hdr_t* pkt, interface_id_t int_id) {
     udp_hdr_t* udp_hdr = (udp_hdr_t*)transport_ptr;
     udp_hdr->port_dst = from_port(entry->lan_port);
   }
+  hashmap_unlock(&napt_extern_hashmap);
 
   // Checksum is handled in outgoing.c in send_ipv4() function
 

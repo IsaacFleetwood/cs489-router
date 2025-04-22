@@ -14,6 +14,8 @@ void print_word(void* key, size_t size) {
 }
 
 hashmap_t hashmap_init(size_t hash_func(void*), size_t size_key, size_t size_value) {
+    // MT-WORK: This is only used in ipv4 in an init func. Assuming that the job of initializing
+    // is not shared amongst multiple threads at the same time this should be fine as is.
     size_t size_tag_map = (HASHMAP_SIZE_INIT * 2 + 7) / 8; // Round up.
     size_t size_data_map = (size_value + size_key) * HASHMAP_SIZE_INIT;
     hashmap_t hashmap;
@@ -23,10 +25,15 @@ hashmap_t hashmap_init(size_t hash_func(void*), size_t size_key, size_t size_val
     hashmap.data = calloc(1, size_tag_map + size_data_map);
     hashmap.size_allocated = HASHMAP_SIZE_INIT;
     hashmap.size = 0;
+    if (pthread_mutex_init(&hashmap.lock_, NULL) != 0) {
+        perror("pthread_mutex_init()");
+        return (hashmap_t) {0};
+    }
     return hashmap;
 }
 
 size_t hashmap_cyclic_hash(void* ptr, size_t size) {
+    // MT-WORK: only reads occur
     uint8_t* byte_ptr = (uint8_t*) ptr;
     size_t ring_size = (size_t) (pow(2, 31) - 1); // a double Mersenne prime. Note: This does cap hashes to 31-bits.
     size_t hash = 0;
@@ -71,7 +78,7 @@ void hashmap_insert(hashmap_t* hashmap, void* key, void* value) {
 }
 
 void hashmap_grow(hashmap_t* hashmap) {
-
+    printf("Growing! -----------\r\n");
     size_t old_size_allocated = hashmap->size_allocated;
     uint8_t* old_tags = hashmap->data;
     uint8_t* old_data = hashmap->data + (hashmap->size_allocated * 2 + 7) / 8;
@@ -80,10 +87,17 @@ void hashmap_grow(hashmap_t* hashmap) {
     size_t size_data_map = (hashmap->size_value + hashmap->size_key) * (hashmap->size_allocated * 2 + 1);
 
     hashmap->size_allocated = hashmap->size_allocated * 2 + 1;
-    hashmap->data = malloc(size_tag_map + size_data_map);
+    hashmap->data = calloc(size_tag_map + size_data_map, 1);
+
+    if (hashmap->data == NULL) {
+        fprintf(stderr, "hashmap.c");
+        perror("malloc");
+    }
+
     hashmap->size = 0;
     uint8_t* tags = hashmap->data;
     uint8_t* data = hashmap->data + size_tag_map;
+    // MT-WORK: only reads occur in this scope.
     for(int i = 0; i < old_size_allocated / 4; i++) {
         uint8_t tag_byte = old_tags[i];
         for(int j = 0; j < 4; j++) {
@@ -96,6 +110,7 @@ void hashmap_grow(hashmap_t* hashmap) {
         }
     }
     free(old_tags);
+    old_tags = NULL;
 }
 
 void* hashmap_get(hashmap_t* hashmap, void* key) {
@@ -109,6 +124,7 @@ void* hashmap_get(hashmap_t* hashmap, void* key) {
             uint8_t* key_ptr = hashmap->data + ((hashmap->size_allocated + 3) / 4) + ((hashmap->size_value + hashmap->size_key) * index);
             if(memcmp(key_ptr, key, hashmap->size_key) == 0) {
                 uint8_t* value_ptr = key_ptr + hashmap->size_key;
+                pthread_mutex_unlock(&(hashmap->lock_));
                 return value_ptr;
             }
         }
@@ -143,4 +159,12 @@ void hashmap_remove(hashmap_t* hashmap, void* key) {
             index -= 1;
         }
     }
+}
+
+void hashmap_lock(hashmap_t* hashmap) {
+    pthread_mutex_lock(&(hashmap->lock_));
+}
+
+void hashmap_unlock(hashmap_t* hashmap) {
+    pthread_mutex_unlock(&(hashmap->lock_));
 }

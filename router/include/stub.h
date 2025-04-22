@@ -21,7 +21,7 @@ typedef struct pcaprec_hdr_s {
     uint32_t orig_len;       /* actual length of packet */
 } pcaprec_hdr_t;
 
-#define STUB_ENABLED
+// #define STUB_ENABLED
 
 void stub_init();
 void stub_write_pkt(uint8_t* ptr, uint32_t size);
