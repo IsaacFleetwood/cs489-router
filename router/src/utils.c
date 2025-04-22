@@ -19,9 +19,9 @@ ip_addr_t create_subnet_mask(uint8_t cidr_prefix_len) {
 int prefix_len_get(ip_addr_t mask) {
   int prefix_len = 0;
   for(int j = 0; j < 4; j++) {
-    int val = mask.bytes[j];
+    uint16_t val = mask.bytes[j];
     int byte_len = 8;
-    while(!(val & 1)) {
+    while(!(val & 1) && (byte_len > 0)) {
       byte_len -= 1;
       val = val >> 1;
     }

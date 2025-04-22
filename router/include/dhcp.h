@@ -11,6 +11,10 @@
 #define MAX_LEASES 10
 #define DHCP_OPTION_MESSAGE_TYPE 53
 #define DHCP_OPTION_REQUESTED_IP 50
+#define DHCP_OPTION_LEASE_TIME 51
+#define DHCP_OPTION_SUBNET_MASK 1
+#define DHCP_OPTION_ROUTER 3
+#define DHCP_OPTION_DNS 6
 #define DHCP_DISCOVER 1
 #define DHCP_OFFER 2
 #define DHCP_REQUEST 3
@@ -25,5 +29,7 @@ struct in_addr get_available_ip();
 struct in_addr extract_requested_ip(uint8_t* buffer);
 void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer);
 void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip, uint8_t* buffer);
+void send_dhcp_nak(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer);
+void cleanup_expired_leases();
 
 #endif // DHCP_H

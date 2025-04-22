@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <pthread.h>
 
+#include "../include/dhcp.h"
 #include "../include/ethernet.h"
 #include "../include/timer.h"
 #include "../include/stub.h"
@@ -80,7 +81,7 @@ int main(int argc, char** argv) {
 
   while (tmp) {
     if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
-      if(strcmp(wan_config->name, tmp->ifa_name) != 0) {
+      if(strncmp(wan_config->name, tmp->ifa_name, strlen(wan_config->name)) != 0) {
         tmp = tmp->ifa_next;
         continue;
       }
@@ -180,6 +181,7 @@ void* thread_start(void* arg) {
     return NULL;
   }
 
+  printf("Reading from socket %s\r\n", config->name);
   while(1) {
     // read packet
 		int bytes_rec = read(sockfd, buffer, ETHER_MTU);

@@ -53,9 +53,7 @@ uint8_t tag_get(hashmap_t* hashmap, size_t index) {
 void tag_set(hashmap_t* hashmap, size_t index, uint8_t tag) {
     size_t byte_index = index / 4;
     size_t bit_index = (index % 4) * 2;
-    pthread_mutex_lock(&(hashmap->lock_));
     hashmap->data[byte_index] = (hashmap->data[byte_index] & ~(0x03 << bit_index)) | (tag << bit_index);
-    pthread_mutex_unlock(&(hashmap->lock_));
 }
 
 void hashmap_insert(hashmap_t* hashmap, void* key, void* value) {
@@ -69,10 +67,8 @@ void hashmap_insert(hashmap_t* hashmap, void* key, void* value) {
         if(tag == HASHMAP_TAG_EMPTY || tag == HASHMAP_TAG_GRAVE) {
             uint8_t* key_ptr = hashmap->data + ((hashmap->size_allocated + 3) / 4) + ((hashmap->size_value + hashmap->size_key) * index);
             uint8_t* value_ptr = key_ptr + hashmap->size_key;
-            pthread_mutex_lock(&(hashmap->lock_));
             memcpy(key_ptr, key, hashmap->size_key);
             memcpy(value_ptr, value, hashmap->size_value);
-            pthread_mutex_unlock(&(hashmap->lock_));
             tag_set(hashmap, index, HASHMAP_TAG_TAKEN);
             hashmap->size += 1;
             break;
@@ -82,6 +78,7 @@ void hashmap_insert(hashmap_t* hashmap, void* key, void* value) {
 }
 
 void hashmap_grow(hashmap_t* hashmap) {
+    printf("Growing! -----------\r\n");
     size_t old_size_allocated = hashmap->size_allocated;
     uint8_t* old_tags = hashmap->data;
     uint8_t* old_data = hashmap->data + (hashmap->size_allocated * 2 + 7) / 8;
@@ -89,10 +86,8 @@ void hashmap_grow(hashmap_t* hashmap) {
     size_t size_tag_map = ((hashmap->size_allocated * 2 + 1) * 2 + 7) / 8; // Round up.
     size_t size_data_map = (hashmap->size_value + hashmap->size_key) * (hashmap->size_allocated * 2 + 1);
 
-    pthread_mutex_lock(&(hashmap->lock_));
     hashmap->size_allocated = hashmap->size_allocated * 2 + 1;
-    hashmap->data = malloc(size_tag_map + size_data_map);
-    pthread_mutex_unlock(&(hashmap->lock_));
+    hashmap->data = calloc(size_tag_map + size_data_map, 1);
 
     if (hashmap->data == NULL) {
         fprintf(stderr, "hashmap.c");
@@ -127,13 +122,11 @@ void* hashmap_get(hashmap_t* hashmap, void* key) {
             return NULL;
         } else if(tag == HASHMAP_TAG_TAKEN) {
             uint8_t* key_ptr = hashmap->data + ((hashmap->size_allocated + 3) / 4) + ((hashmap->size_value + hashmap->size_key) * index);
-            pthread_mutex_lock(&(hashmap->lock_));
             if(memcmp(key_ptr, key, hashmap->size_key) == 0) {
                 uint8_t* value_ptr = key_ptr + hashmap->size_key;
                 pthread_mutex_unlock(&(hashmap->lock_));
                 return value_ptr;
             }
-            pthread_mutex_unlock(&(hashmap->lock_));
         }
         index = (index + 1) % hashmap->size_allocated;
     } while(1);
@@ -152,16 +145,11 @@ void hashmap_remove(hashmap_t* hashmap, void* key) {
             return;
         } else if(tag == HASHMAP_TAG_TAKEN) {
             uint8_t* key_ptr = hashmap->data + ((hashmap->size_value + hashmap->size_key) + index);
-            pthread_mutex_lock(&(hashmap->lock_));
             if(memcmp(key_ptr, key, hashmap->size_key) == 0) {
-                pthread_mutex_unlock(&(hashmap->lock_));
                 tag_set(hashmap, index, HASHMAP_TAG_GRAVE);
-                pthread_mutex_lock(&(hashmap->lock_));
                 hashmap->size -= 1;
-                pthread_mutex_unlock(&(hashmap->lock_));
                 break;
             }
-            pthread_mutex_unlock(&(hashmap->lock_));
         }
         index = (index + 1) % hashmap->size_allocated;
     } while(1);
@@ -171,4 +159,12 @@ void hashmap_remove(hashmap_t* hashmap, void* key) {
             index -= 1;
         }
     }
+}
+
+void hashmap_lock(hashmap_t* hashmap) {
+    pthread_mutex_lock(&(hashmap->lock_));
+}
+
+void hashmap_unlock(hashmap_t* hashmap) {
+    pthread_mutex_unlock(&(hashmap->lock_));
 }

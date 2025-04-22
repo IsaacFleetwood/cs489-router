@@ -8,25 +8,25 @@
 // TODO: Use mutexes to guard this data structure. (Depending on when/if it is modified)
 interface_config_t interface_arr[] = {
   {
-    .name = "ens3",
+    .name = "veth-router",
     .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
-    .network_ip = {192,168,2,0},
+    .network_ip = {192,168,1,0},
     .cidr_prefix_len = 24,
-    .interface_ip = {192,168,2,1},
+    .interface_ip = {192,168,1,1},
     .side = INT_SIDE_LAN,
     .type = INT_TYPE_ETHER,
   },/*
   {
     .name = "wlo0",
     .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
-    .network_ip = {192, 168, 1, 0},
+    .network_ip = {192, 168, 2, 0},
     .cidr_prefix_len = 24,
-    .interface_ip = {192,168,1,1},
+    .interface_ip = {192,168,2,1},
     .side = INT_SIDE_LAN,
     .type = INT_TYPE_WIFI,
   },*/
   {
-    .name = "ens4",
+    .name = "veth-hostroute",
     .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
     .network_ip = {0,0,0,0},
     .cidr_prefix_len = 0,

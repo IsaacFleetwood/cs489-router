@@ -32,4 +32,8 @@ void* hashmap_get(hashmap_t* hashmap, void* key);
 int hashmap_contains(hashmap_t* hashmap, void* key);
 void hashmap_remove(hashmap_t* hashmap, void* key);
 
+void hashmap_lock(hashmap_t* hashmap);
+
+void hashmap_unlock(hashmap_t* hashmap);
+
 #endif

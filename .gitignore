@@ -1,4 +1,5 @@
 router/main
 router/stub
 router/src/*.o
-router/out.pcap
+router/*.pcap
+interface_name.txt

@@ -116,7 +116,10 @@ void send_ipv4(ipv4_hdr_t* pkt) {
     #ifdef STUB_ENABLED
       stub_write_pkt((uint8_t*) new_ether_pkt, size);
     #else
-      write(interface_get_config(int_id)->fd, new_ether_pkt, size);
+      int res = write(interface_get_config(int_id)->fd, new_ether_pkt, size);
+      if (res == -1) {
+				perror("sendto failed");
+			}
     #endif
 
     free(new_ether_pkt);
@@ -152,7 +155,10 @@ void send_arp(arp_hdr_t* pkt, interface_id_t int_id) {
     #ifdef STUB_ENABLED
       stub_write_pkt((uint8_t*) new_ether_pkt, size);
     #else
-      write(interface_get_config(int_id)->fd, new_ether_pkt, size);
+      int res = write(interface_get_config(int_id)->fd, new_ether_pkt, size);
+      if (res == -1) {
+				perror("sendto failed");
+			}
     #endif
 
     free(new_ether_pkt);
