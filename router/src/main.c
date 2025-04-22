@@ -38,14 +38,15 @@ char* mac_addr_to_string(struct mac_addr mac_addr) {
 }
 
 // #define TEST_ENABLED
-// #define DRIVER_ENABLED
 
+// #define DRIVER_ENABLED
 int driver_main(int argc, char** argv);
 void testcase_run();
-
+void* dhcp_thread(void* arg);
 void* thread_start(void* arg);
 
 int main(int argc, char** argv) {
+  printf("Starting router...\n");
 
   napt_init();
   timer_init();
@@ -58,6 +59,12 @@ int main(int argc, char** argv) {
     #endif
   #endif
 
+
+  // ** Start DHCP Server in a Separate Thread **
+  pthread_t dhcp_tid;
+  if (pthread_create(&dhcp_tid, NULL, dhcp_thread, NULL) != 0) {
+      perror("Failed to start DHCP server");
+  }
 
   #ifdef DRIVER_ENABLED
     return driver_main(argc, argv);
@@ -116,6 +123,12 @@ int main(int argc, char** argv) {
   }
   
   return 0;
+}
+
+// ** Function to Run DHCP Server in a Separate Thread **
+void* dhcp_thread(void* arg) {
+  dhcp_server_start();
+  return NULL;
 }
 
 void* thread_start(void* arg) {
@@ -184,6 +197,5 @@ void* thread_start(void* arg) {
 
   free(buffer);
   close(sockfd);
-
   return NULL;
 }
