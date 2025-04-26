@@ -1,7 +1,7 @@
 
-
 #include "../include/interfaces.h"
 #include "../include/utils.h"
+#include "../include/wifi.h"
 
 // TODO: Fill in mac addresses and interface IPs.
 // TODO: Move to configurable file/db? Add management interface where you can change this?
@@ -15,16 +15,16 @@ interface_config_t interface_arr[] = {
     .interface_ip = {192,168,1,1},
     .side = INT_SIDE_LAN,
     .type = INT_TYPE_ETHER,
-  },/*
+  },
   {
-    .name = "wlo0",
+    .name = "wlan0",
     .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
-    .network_ip = {192, 168, 2, 0},
+    .network_ip = {192,168,2,0},
     .cidr_prefix_len = 24,
     .interface_ip = {192,168,2,1},
     .side = INT_SIDE_LAN,
     .type = INT_TYPE_WIFI,
-  },*/
+  },
   {
     .name = "veth-hostroute",
     .device_mac_addr = {{0, 0, 0, 0, 0, 0}},
@@ -36,9 +36,9 @@ interface_config_t interface_arr[] = {
   },
 };
 
-ip_addr_t wan_network_ip = {192,168,0,0}; // Given by DHCP
-int wan_cidr_prefix_len = 24; // Given by DHCP
-ip_addr_t wan_gateway_ip = {192,168,0,1}; // Given by DHCP
+ip_addr_t wan_network_ip = {192,168,0,0};   // Given by DHCP
+int wan_cidr_prefix_len = 24;               // Given by DHCP
+ip_addr_t wan_gateway_ip = {192,168,0,1};   // Given by DHCP
 
 mac_addr_t interface_mac_addrs[] = {
     {{0, 0, 0, 0, 0, 0}},
@@ -95,4 +95,20 @@ interface_id_t get_interface_for_ip(ip_addr_t ip) {
 
 mac_addr_t interface_get_mac_addr(interface_id_t int_id) {
     return interface_arr[int_id].device_mac_addr;
+}
+
+void interface_init_all() {
+  size_t amt = interface_get_amt();
+  for (interface_id_t i = 0; i < amt; ++i) {
+      interface_config_t* iface = interface_get_config(i);
+
+      if (iface->type == INT_TYPE_WIFI) {
+          // printf("[Router] Wi-Fi interface detected: %s\n", iface->name);      // Debugging purpose
+          wifi_init(iface->name);
+          wifi_set_ip(iface->name, "192.168.2.1", "24");
+      } else {
+          //printf("[Router] Ethernet interface detected: %s\n", iface->name);    // Debugging purpose
+          // Ethernet init
+      }
+  }
 }

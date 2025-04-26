@@ -13,7 +13,10 @@ typedef struct {
 } ethernet_hdr_t;
 
 #define ETHERTYPE_IPV4 (0x0800)
+#ifndef ETHERTYPE_ARP
 #define ETHERTYPE_ARP (0x0806)
+#endif
+
 
 void ethernet_handle(ethernet_hdr_t* pkt_ptr, interface_id_t int_id);
 

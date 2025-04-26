@@ -3,10 +3,12 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <time.h>
 #include <stdint.h>
 #include "../include/dhcp.h"
+
 
 typedef struct {
     struct in_addr ip;
@@ -16,98 +18,89 @@ typedef struct {
     int allocated;
 } dhcp_lease_t;
 
-static dhcp_lease_t lease_table[MAX_LEASES];
+#define LEASE_TIME 1800     // Lease time: 30 minutes
 
-struct in_addr dhcp_pool_start;
-struct in_addr dhcp_pool_end;
+// Separate lease tables
+static dhcp_lease_t lease_table_wired[MAX_LEASES];
+static dhcp_lease_t lease_table_wifi[MAX_LEASES];
+
+// Pool starts and ends
+struct in_addr dhcp_pool_start_wired;
+struct in_addr dhcp_pool_end_wired;
+struct in_addr dhcp_pool_start_wifi;
+struct in_addr dhcp_pool_end_wifi;
+
 struct sockaddr_in broad_addr;
 
-/* Manual Configuration of IP Pool */
+/* Initialize DHCP IP pools */
 void init_dhcp_pool() {
-    if (inet_aton("192.168.1.100", &dhcp_pool_start) == 0) {
-        perror("Invalid start IP");
-        exit(EXIT_FAILURE);
-    }
-    if (inet_aton("192.168.1.110", &dhcp_pool_end) == 0) {
-        perror("Invalid end IP");
-        exit(EXIT_FAILURE);
-    }
-    // inet_ntoa uses the same buffer every time, so must print separately.
-    printf("DHCP Pool Range: %s - ", inet_ntoa(dhcp_pool_start));
-    printf("%s\r\n", inet_ntoa(dhcp_pool_end));
+    // Wired pool
+    if (inet_aton("192.168.1.100", &dhcp_pool_start_wired) == 0) { perror("Invalid wired start IP"); exit(EXIT_FAILURE); }
+    if (inet_aton("192.168.1.110", &dhcp_pool_end_wired) == 0) { perror("Invalid wired end IP"); exit(EXIT_FAILURE); }
+
+    // Wi-Fi pool
+    if (inet_aton("192.168.2.100", &dhcp_pool_start_wifi) == 0) { perror("Invalid wifi start IP"); exit(EXIT_FAILURE); }
+    if (inet_aton("192.168.2.110", &dhcp_pool_end_wifi) == 0) { perror("Invalid wifi end IP"); exit(EXIT_FAILURE); }
+
+    printf("Wired DHCP Pool: %s - %s\n", inet_ntoa(dhcp_pool_start_wired), inet_ntoa(dhcp_pool_end_wired));
+    printf("Wi-Fi DHCP Pool: %s - %s\n", inet_ntoa(dhcp_pool_start_wifi), inet_ntoa(dhcp_pool_end_wifi));
 }
 
-/* Validate IP address functions */
-int is_ip_in_pool(struct in_addr ip) {
-    uint32_t ip_val = (ip.s_addr);
-    return ip_val >= (dhcp_pool_start.s_addr) &&
-           ip_val <= (dhcp_pool_end.s_addr);
-}
+/* Cleanup expired leases */
+void cleanup_expired_leases(int is_wifi) {
+    time_t now = time(NULL);
+    dhcp_lease_t *lease_table = is_wifi ? lease_table_wifi : lease_table_wired;
 
-int is_ip_available(struct in_addr ip) {
     for (int i = 0; i < MAX_LEASES; i++) {
-        if (lease_table[i].allocated &&
-            lease_table[i].ip.s_addr == ip.s_addr &&
-            time(NULL) < lease_table[i].lease_expiry) {
-            return 0; // IP is already leased
+        if (lease_table[i].allocated && lease_table[i].lease_expiry <= now) {
+            lease_table[i].allocated = 0;
+            memset(&lease_table[i].ip, 0, sizeof(struct in_addr));
         }
     }
-    return 1; // IP is available
 }
 
-void dhcp_server_start() {
-    init_dhcp_pool();
+/* Get available IP */
+struct in_addr get_available_ip(int is_wifi) {
+    cleanup_expired_leases(is_wifi);
 
-    // Setup broadcast address to be used when responding.
-    memset(&broad_addr, 0, sizeof(broad_addr));
-    broad_addr.sin_family = AF_INET;
-    broad_addr.sin_port = htons(68); // DHCP client port
-    broad_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST); // 255.255.255.255
+    dhcp_lease_t *lease_table = is_wifi ? lease_table_wifi : lease_table_wired;
+    struct in_addr start_ip = is_wifi ? dhcp_pool_start_wifi : dhcp_pool_start_wired;
 
-
-    int sockfd;
-    struct sockaddr_in server_addr, client_addr;
-    uint8_t buffer[DHCP_BUFFER_SIZE];
-
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-
-    const char *iface = "veth-router";
-    if (setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, iface, strlen(iface)) < 0) {
-        perror("setsockopt(SO_BINDTODEVICE)");
-        exit(EXIT_FAILURE);
-    }
-
-
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;//inet_addr("192.168.1.1");//INADDR_ANY;
-    server_addr.sin_port = htons(DHCP_SERVER_PORT);
-
-    if (bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Bind failed");
-        close(sockfd);
-        exit(EXIT_FAILURE);
-    }
-
-    int broadcastEnable = 1;
-    setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable));
-
-    printf("DHCP Server running on port %d\r\n", DHCP_SERVER_PORT);
-
-    socklen_t len = sizeof(client_addr);
-    while (1) {
-        int recv_len = recvfrom(sockfd, buffer, DHCP_BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, &len);
-        if (recv_len > 0) {
-            handle_dhcp_packet(sockfd, &client_addr, buffer, recv_len);
+    for (int i = 0; i < MAX_LEASES; i++) {
+        if (!lease_table[i].allocated) {
+            lease_table[i].allocated = 1;
+            lease_table[i].lease_start = time(NULL);
+            lease_table[i].lease_expiry = lease_table[i].lease_start + LEASE_TIME;
+            lease_table[i].ip.s_addr = ntohl(ntohl(start_ip.s_addr) + i);
+            return lease_table[i].ip;
         }
     }
-    close(sockfd);
+
+    struct in_addr empty = { .s_addr = inet_addr("0.0.0.0") };
+    return empty;
 }
 
-void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, int recv_len) {
+/* Extract requested IP */
+struct in_addr extract_requested_ip(uint8_t* buffer) {
+    struct in_addr requested_ip = { .s_addr = 0 };
+    uint8_t* options = buffer + 240;
+
+    while (*options != DHCP_END && options < buffer + DHCP_BUFFER_SIZE) {
+        uint8_t option_type = options[0];
+        uint8_t option_len = options[1];
+
+        if (option_type == DHCP_OPTION_REQUESTED_IP) {
+            memcpy(&requested_ip.s_addr, &options[2], 4);
+            break;
+        }
+
+        options += 2 + option_len;
+    }
+    return requested_ip;
+}
+
+/* Handle incoming DHCP packet */
+void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, int recv_len, int is_wifi) {
     uint8_t* options = buffer + 240;
     uint8_t message_type = 0;
 
@@ -122,86 +115,40 @@ void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* bu
 
         options += 2 + option_len;
     }
-                                                                                            //________DORA______
-    if (message_type == DHCP_DISCOVER) {                                                    //                  | Discover
-        printf("Received DHCP Discover from %s\r\n", inet_ntoa(client_addr->sin_addr));       //                  |
-        send_dhcp_offer(sockfd, client_addr, buffer);                                       //                  | Offer
+
+    if (message_type == DHCP_DISCOVER) {
+        struct in_addr offered_ip = get_available_ip(is_wifi);
+        send_dhcp_offer(sockfd, client_addr, buffer, offered_ip, is_wifi);
     } else if (message_type == DHCP_REQUEST) {
-        printf("Received DHCP Request from %s\r\n", inet_ntoa(client_addr->sin_addr));
-    
         struct in_addr requested_ip = extract_requested_ip(buffer);
-        printf("DHCP Request requested %s\r\n", inet_ntoa(requested_ip));
-        
-        printf("%d %d\r\n", is_ip_in_pool(requested_ip), is_ip_available(requested_ip));
-        if (!is_ip_in_pool(requested_ip) || is_ip_available(requested_ip)) {
+
+        if (requested_ip.s_addr == 0) {
             send_dhcp_nak(sockfd, client_addr, buffer);
         } else {
-            send_dhcp_ack(sockfd, client_addr, requested_ip, buffer);
-        }
-    }    
-}
-
-struct in_addr get_available_ip() {
-    cleanup_expired_leases();
-
-    for (int i = 0; i < MAX_LEASES; i++) {
-        if (!lease_table[i].allocated) {
-            lease_table[i].allocated = 1;
-            lease_table[i].lease_start = time(NULL);
-            lease_table[i].lease_expiry = lease_table[i].lease_start + 180000;
-            lease_table[i].ip.s_addr = ntohl(ntohl(dhcp_pool_start.s_addr) + i);
-            return lease_table[i].ip;
+            send_dhcp_ack(sockfd, client_addr, requested_ip, buffer, is_wifi);
         }
     }
-    struct in_addr empty = { .s_addr = inet_addr("0.0.0.0") };
-    return empty;
 }
 
-struct in_addr extract_requested_ip(uint8_t* buffer) {
-    struct in_addr requested_ip = { .s_addr = 0 };
-    uint8_t* options = buffer + 240;
-
-    while (*options != DHCP_END && options < buffer + DHCP_BUFFER_SIZE) {
-        uint8_t option_type = options[0];
-        uint8_t option_len = options[1];
-
-        if (option_type == DHCP_OPTION_REQUESTED_IP) {
-            memcpy(&requested_ip.s_addr, &options[2], 4);
-            break;
-        }
-        
-        options += 2 + option_len;
-    }
-    return requested_ip;
-}
-
-void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer) {
-    struct in_addr offered_ip = get_available_ip();
-    printf("Sending DHCP Offer (IP: %s)\r\n", inet_ntoa(offered_ip));
-
+/* Send DHCP Offer */
+void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, struct in_addr offered_ip, int is_wifi) {
     uint8_t offer_packet[DHCP_BUFFER_SIZE] = {0};
     memcpy(offer_packet, buffer, 240);
 
-    offer_packet[0] = 0x02;
-    memcpy(&offer_packet[16], &offered_ip.s_addr, 4); // yiaddr
-    struct in_addr server_addr; inet_aton("192.168.1.1", &server_addr);
-    memcpy(&offer_packet[24], &server_addr, 4); // giaddr
-    struct in_addr gateway; inet_aton("192.168.1.1", &gateway);
-    memcpy(&offer_packet[24], &gateway, 4); // giaddr
-    
+    offer_packet[0] = 0x02;                             // Boot Reply
+    memcpy(&offer_packet[16], &offered_ip.s_addr, 4);   // yiaddr
+
+    struct in_addr router_ip;
+    inet_aton(is_wifi ? "192.168.2.1" : "192.168.1.1", &router_ip);
+
     uint8_t* options = offer_packet + 240 * 4;
     *(options++) = DHCP_OPTION_MESSAGE_TYPE;
     *(options++) = 1;
     *(options++) = DHCP_OFFER;
 
-    *(options++) = DHCP_OPTION_REQUESTED_IP;
-    *(options++) = 4;
-    memcpy(options, &offered_ip.s_addr, 4);
-    options += 4;
-
     *(options++) = DHCP_OPTION_LEASE_TIME;
     *(options++) = 4;
-    uint32_t lease_time = htonl(18000);
+    uint32_t lease_time = htonl(LEASE_TIME);
     memcpy(options, &lease_time, 4);
     options += 4;
 
@@ -213,8 +160,7 @@ void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffe
 
     *(options++) = DHCP_OPTION_ROUTER;
     *(options++) = 4;
-    struct in_addr router; inet_aton("192.168.1.1", &router);
-    memcpy(options, &router, 4);
+    memcpy(options, &router_ip, 4);
     options += 4;
 
     *(options++) = DHCP_OPTION_DNS;
@@ -225,34 +171,28 @@ void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffe
 
     *(options++) = DHCP_END;
 
-    int res = sendto(sockfd, offer_packet, ((size_t) options - (size_t) offer_packet), 0, (struct sockaddr*) &broad_addr, sizeof(broad_addr));
-    if(res == -1) {
-        perror("sendto");
-    }
+    sendto(sockfd, offer_packet, (size_t)(options - offer_packet), 0, (struct sockaddr*) &broad_addr, sizeof(broad_addr));
 }
 
-void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip, uint8_t* buffer) {
-    printf("Sending DHCP ACK (IP: %s)\r\n", inet_ntoa(allocated_ip));
-
+/* Send DHCP ACK */
+void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip, uint8_t* buffer, int is_wifi) {
     uint8_t ack_packet[DHCP_BUFFER_SIZE] = {0};
     memcpy(ack_packet, buffer, 240);
 
-    ack_packet[0] = 0x02;
+    ack_packet[0] = 0x02; // Boot Reply
     memcpy(&ack_packet[16], &allocated_ip.s_addr, 4); // yiaddr
+
+    struct in_addr router_ip;
+    inet_aton(is_wifi ? "192.168.2.1" : "192.168.1.1", &router_ip);
 
     uint8_t* options = ack_packet + 240 * 4;
     *(options++) = DHCP_OPTION_MESSAGE_TYPE;
     *(options++) = 1;
     *(options++) = DHCP_ACK;
 
-    *(options++) = DHCP_OPTION_REQUESTED_IP;
-    *(options++) = 4;
-    memcpy(options, &allocated_ip.s_addr, 4);
-    options += 4;
-
     *(options++) = DHCP_OPTION_LEASE_TIME;
     *(options++) = 4;
-    uint32_t lease_time = htonl(18000);
+    uint32_t lease_time = htonl(LEASE_TIME);
     memcpy(options, &lease_time, 4);
     options += 4;
 
@@ -264,8 +204,7 @@ void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr a
 
     *(options++) = DHCP_OPTION_ROUTER;
     *(options++) = 4;
-    struct in_addr router; inet_aton("192.168.1.1", &router);
-    memcpy(options, &router, 4);
+    memcpy(options, &router_ip, 4);
     options += 4;
 
     *(options++) = DHCP_OPTION_DNS;
@@ -276,19 +215,15 @@ void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr a
 
     *(options++) = DHCP_END;
 
-    int res = sendto(sockfd, ack_packet, ((size_t) options - (size_t) ack_packet), 0, (struct sockaddr*) &broad_addr, sizeof(broad_addr));
-    if(res == -1) {
-        perror("sendto");
-    }
+    sendto(sockfd, ack_packet, (size_t)(options - ack_packet), 0, (struct sockaddr*) &broad_addr, sizeof(broad_addr));
 }
 
+/* Send DHCP NAK */
 void send_dhcp_nak(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer) {
-    printf("Sending DHCP NAK\r\n");
-
     uint8_t nak_packet[DHCP_BUFFER_SIZE] = {0};
-    memcpy(nak_packet, buffer, 240 * 4); // Copy original BOOTP header for xid and chaddr
+    memcpy(nak_packet, buffer, 240 * 4);
 
-    nak_packet[0] = 0x02;
+    nak_packet[0] = 0x02; // Boot Reply
 
     uint8_t* options = nak_packet + 240 * 4;
     *(options++) = DHCP_OPTION_MESSAGE_TYPE;
@@ -296,20 +231,93 @@ void send_dhcp_nak(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer)
     *(options++) = DHCP_NAK;
     *(options++) = DHCP_END;
 
-    sendto(sockfd, nak_packet, ((size_t) options - (size_t) nak_packet), 0,
-        (struct sockaddr*) &broad_addr, sizeof(broad_addr));
+    sendto(sockfd, nak_packet, (size_t)(options - nak_packet), 0, (struct sockaddr*) &broad_addr, sizeof(broad_addr));
 }
 
-void cleanup_expired_leases() {
-    time_t now = time(NULL);
+/* Start DHCP Server */
+void dhcp_server_start() {
+    printf("[Router] Starting DHCP server...\n");
 
-    for (int i = 0; i < MAX_LEASES; i++) {
-        if (lease_table[i].allocated && lease_table[i].lease_expiry <= now) {
-            printf("Reclaiming expired lease: %s\r\n", inet_ntoa(lease_table[i].ip));
-            lease_table[i].allocated = 0;
-            lease_table[i].lease_start = 0;
-            lease_table[i].lease_expiry = 0;
-            memset(&lease_table[i].ip, 0, sizeof(struct in_addr));
+    init_dhcp_pool(); // Setup wired and Wi-Fi pools
+
+    memset(&broad_addr, 0, sizeof(broad_addr));
+    broad_addr.sin_family = AF_INET;
+    broad_addr.sin_port = htons(68);
+    broad_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+
+    int sockfd_wired, sockfd_wifi;
+    struct sockaddr_in addr_wired, addr_wifi;
+    uint8_t buffer[DHCP_BUFFER_SIZE];
+
+    // Wired socket
+    sockfd_wired = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd_wired < 0) { perror("socket wired"); exit(EXIT_FAILURE); }
+    const char *iface_wired = "veth-router";
+    if (setsockopt(sockfd_wired, SOL_SOCKET, SO_BINDTODEVICE, iface_wired, strlen(iface_wired)) < 0) {
+        perror("setsockopt wired"); exit(EXIT_FAILURE);
+    }
+
+    memset(&addr_wired, 0, sizeof(addr_wired));
+    addr_wired.sin_family = AF_INET;
+    addr_wired.sin_addr.s_addr = INADDR_ANY;
+    addr_wired.sin_port = htons(DHCP_SERVER_PORT);
+
+    if (bind(sockfd_wired, (struct sockaddr*)&addr_wired, sizeof(addr_wired)) < 0) {
+        perror("bind wired"); close(sockfd_wired); exit(EXIT_FAILURE);
+    }
+
+    // Wi-Fi socket
+    sockfd_wifi = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd_wifi < 0) { perror("socket wifi"); exit(EXIT_FAILURE); }
+    const char *iface_wifi = "wlan0";
+    if (setsockopt(sockfd_wifi, SOL_SOCKET, SO_BINDTODEVICE, iface_wifi, strlen(iface_wifi)) < 0) {
+        perror("setsockopt wifi"); exit(EXIT_FAILURE);
+    }
+
+    memset(&addr_wifi, 0, sizeof(addr_wifi));
+    addr_wifi.sin_family = AF_INET;
+    addr_wifi.sin_addr.s_addr = INADDR_ANY;
+    addr_wifi.sin_port = htons(DHCP_SERVER_PORT);
+
+    if (bind(sockfd_wifi, (struct sockaddr*)&addr_wifi, sizeof(addr_wifi)) < 0) {
+        perror("bind wifi"); close(sockfd_wifi); exit(EXIT_FAILURE);
+    }
+
+    int broadcastEnable = 1;
+    setsockopt(sockfd_wired, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable));
+    setsockopt(sockfd_wifi, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable));
+
+    printf("[DHCP] Server running on veth-router and wlan0!\n");
+
+    fd_set readfds;
+    socklen_t len = sizeof(struct sockaddr_in);
+
+    while (1) {
+        FD_ZERO(&readfds);
+        FD_SET(sockfd_wired, &readfds);
+        FD_SET(sockfd_wifi, &readfds);
+
+        int maxfd = (sockfd_wired > sockfd_wifi) ? sockfd_wired : sockfd_wifi;
+
+        if (select(maxfd + 1, &readfds, NULL, NULL, NULL) < 0) {
+            perror("select");
+            break;
+        }
+
+        if (FD_ISSET(sockfd_wired, &readfds)) {
+            int recv_len = recvfrom(sockfd_wired, buffer, DHCP_BUFFER_SIZE, 0, NULL, &len);
+            if (recv_len > 0) {
+                handle_dhcp_packet(sockfd_wired, NULL, buffer, recv_len, 0); // 0 = wired
+            }
+        }
+        if (FD_ISSET(sockfd_wifi, &readfds)) {
+            int recv_len = recvfrom(sockfd_wifi, buffer, DHCP_BUFFER_SIZE, 0, NULL, &len);
+            if (recv_len > 0) {
+                handle_dhcp_packet(sockfd_wifi, NULL, buffer, recv_len, 1); // 1 = wifi
+            }
         }
     }
+
+    close(sockfd_wired);
+    close(sockfd_wifi);
 }

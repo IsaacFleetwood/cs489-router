@@ -5,6 +5,7 @@
 #include "interfaces.h"
 #include "structs.h"
 
+// Wi-Fi frame header structure (keep this!)
 struct pkt_wifi_hdr {
   uint16_t frame_control;
   uint16_t duration;
@@ -18,6 +19,11 @@ struct pkt_wifi_hdr {
 };
 typedef struct pkt_wifi_hdr pkt_wifi_hdr;
 
+// Function for handling Wi-Fi packets
 void wifi_handle(pkt_wifi_hdr* pkt_ptr, interface_id_t int_id);
 
-#endif
+// Functions to control Wi-Fi interface
+void wifi_init(const char *interface);
+void wifi_set_ip(const char *interface, const char *ip_addr, const char *netmask);
+
+#endif // WIFI_H

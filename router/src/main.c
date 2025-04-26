@@ -18,6 +18,7 @@
 #include "../include/timer.h"
 #include "../include/stub.h"
 #include "../include/utils.h"
+#include "../include/interfaces.h"
 
 #define ETHER_MTU (1518)
 
@@ -51,6 +52,7 @@ int main(int argc, char** argv) {
 
   napt_init();
   timer_init();
+  interface_init_all();
 
   #ifdef STUB_ENABLED
     stub_init();

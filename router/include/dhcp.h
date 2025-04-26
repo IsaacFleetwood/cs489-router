@@ -24,12 +24,12 @@
 
 // Function Declarations
 void dhcp_server_start();
-void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, int recv_len);
-struct in_addr get_available_ip();
+void handle_dhcp_packet(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, int recv_len, int is_wifi);
+struct in_addr get_available_ip(int is_wifi);
 struct in_addr extract_requested_ip(uint8_t* buffer);
-void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer);
-void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip, uint8_t* buffer);
+void send_dhcp_offer(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer, struct in_addr offered_ip, int is_wifi);
+void send_dhcp_ack(int sockfd, struct sockaddr_in* client_addr, struct in_addr allocated_ip, uint8_t* buffer, int is_wifi);
 void send_dhcp_nak(int sockfd, struct sockaddr_in* client_addr, uint8_t* buffer);
-void cleanup_expired_leases();
+void cleanup_expired_leases(int is_wifi);
 
 #endif // DHCP_H

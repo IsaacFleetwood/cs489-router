@@ -30,6 +30,7 @@ extern ip_addr_t wan_network_ip; // Given by DHCP
 extern int wan_cidr_prefix_len;  // Given by DHCP
 extern ip_addr_t wan_gateway_ip; // Given by DHCP
 
+void interface_init_all();
 size_t interface_get_amt();
 interface_id_t get_interface_for_ip(ip_addr_t);
 interface_config_t* interface_get_config(interface_id_t);
