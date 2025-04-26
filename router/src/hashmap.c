@@ -16,7 +16,7 @@ void print_word(void* key, size_t size) {
 hashmap_t hashmap_init(size_t hash_func(void*), size_t size_key, size_t size_value) {
     // MT-WORK: This is only used in ipv4 in an init func. Assuming that the job of initializing
     // is not shared amongst multiple threads at the same time this should be fine as is.
-    size_t size_tag_map = (HASHMAP_SIZE_INIT * 2 + 7) / 8; // Round up.
+    size_t size_tag_map = (HASHMAP_SIZE_INIT + 3) / 4; // Round up.
     size_t size_data_map = (size_value + size_key) * HASHMAP_SIZE_INIT;
     hashmap_t hashmap;
     hashmap.hash_func = hash_func;
@@ -81,9 +81,9 @@ void hashmap_grow(hashmap_t* hashmap) {
     printf("Growing! -----------\r\n");
     size_t old_size_allocated = hashmap->size_allocated;
     uint8_t* old_tags = hashmap->data;
-    uint8_t* old_data = hashmap->data + (hashmap->size_allocated * 2 + 7) / 8;
+    uint8_t* old_data = hashmap->data + ((hashmap->size_allocated + 3) / 4);//(hashmap->size_allocated * 2 + 7) / 8;
 
-    size_t size_tag_map = ((hashmap->size_allocated * 2 + 1) * 2 + 7) / 8; // Round up.
+    size_t size_tag_map = ((hashmap->size_allocated * 2 + 1) + 3) / 4; // Round up.
     size_t size_data_map = (hashmap->size_value + hashmap->size_key) * (hashmap->size_allocated * 2 + 1);
 
     hashmap->size_allocated = hashmap->size_allocated * 2 + 1;
@@ -103,7 +103,7 @@ void hashmap_grow(hashmap_t* hashmap) {
         for(int j = 0; j < 4; j++) {
             uint8_t tag = (tag_byte >> (j * 2)) & 0x03;
             if(tag == HASHMAP_TAG_TAKEN) {
-                uint8_t* key_ptr = data + ((hashmap->size_value + hashmap->size_key) + i * 4 + j);
+                uint8_t* key_ptr = old_data + ((hashmap->size_value + hashmap->size_key) * (i * 4 + j));
                 uint8_t* value_ptr = key_ptr + hashmap->size_key;
                 hashmap_insert(hashmap, key_ptr, value_ptr);
             }
